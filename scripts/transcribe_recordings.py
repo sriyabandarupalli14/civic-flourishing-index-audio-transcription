@@ -19,7 +19,7 @@ def main(argv=None):
     parser.add_argument("--manifest", type=Path, default=Path("outputs/sermon_collection/stage2/recording_manifest.csv"))
     parser.add_argument("--audio-dir", type=Path, default=Path("outputs/sermon_collection/stage3/audio"))
     parser.add_argument("--recording", action="append", required=True)
-    parser.add_argument("--config", type=Path, default=Path("configs/whisper.toml"))
+    parser.add_argument("--config", type=Path, default=Path("configs/production.toml"))
     parser.add_argument("--model-dir", type=Path)
     parser.add_argument("--vocabulary-strategy", choices=("expanded", "dynamic"))
     parser.add_argument("--lexicon", type=Path, default=Path("configs/religious_lexicon.tsv"))

@@ -4,6 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
+from transcription.checkpoints import digest, read_checkpoint
+
 
 def percentage(value):
     return "—" if value is None else f"{100 * value:.1f}%"
@@ -82,11 +84,80 @@ def recommend(benchmark, adaptation):
 
 
 
+def add_findings(lines, benchmark, adaptation):
+    if not benchmark or not adaptation:
+        return
+    base = {(row["reference"], row["condition"]): row for row in benchmark["summaries"]}
+    if any(row["missing_pairs"] for row in base.values()):
+        return
+    references = sorted(benchmark["reference_predictions"])
+    if not all((ref, model) in base for ref in references for model in ("base.en", "small.en", "medium.en")):
+        return
+    lines.extend(["## Findings for H1 and H2", ""])
+    for ref in references:
+        rows = [base[ref, model] for model in ("base.en", "small.en", "medium.en")]
+        values = ", ".join(percentage(row["wer"]) for row in rows)
+        timing = " → ".join(number(row["median_inference_seconds"]) for row in rows)
+        lines.append(f"- **H1, {ref}.** WER for base.en, small.en and medium.en was {values}, respectively. "
+                     f"The corresponding median inference times were {timing} seconds per clip.")
+    for row in benchmark["paired_comparisons"]:
+        if (row["first"], row["second"]) == ("medium.en", "small.en"):
+            interval = (row["intervals_first_minus_second"] or {}).get("wer")
+            if interval:
+                lines.append(f"- The medium.en minus small.en WER interval against {row['reference']} was "
+                             f"{100 * interval['lower']:+.2f} to {100 * interval['upper']:+.2f} percentage "
+                             "points using paired church resampling.")
+    lines.append("")
+    pairs = adaptation["paired_comparisons"]
+    for ref in references:
+        matched = [row for row in pairs if row["reference"] == ref and row["second"] == "medium.en"
+                   and row["first"] == "small.en" and row["meets_comparability_thresholds"]]
+        if matched:
+            row = matched[0]
+            lines.append(f"- **H2, {ref}.** Unprompted small.en met the trade-off against unprompted medium.en "
+                         f"with {100 * row['paired_delta_wer']:+.2f} points of WER, "
+                         f"{100 * row['paired_delta_term_f1']:+.2f} points of term F1, and "
+                         f"{100 * (1 - row['runtime_ratio']):.1f}% lower median inference time.")
+    smaller = [row for row in pairs if row["first"] in {
+        f"{model}-{variant}" for model in ("base.en", "small.en")
+        for variant in ("static", "expanded", "dynamic")
+    } and row["second"] == "medium.en"]
+    if references and len(smaller) == 6 * len(references) and all(
+            row["meets_comparability_thresholds"] is not None for row in smaller):
+        qualified = sum(all(any(row["reference"] == ref and row["first"] == name
+                                and row["meets_comparability_thresholds"] for row in smaller)
+                            for ref in references) for name in {row["first"] for row in smaller})
+        lines.append(f"- **Prompted configurations.** {qualified} of six prompted smaller-model configurations "
+                     "met all criteria against medium.en on every reference.")
+    lines.append("")
+
+
+def add_production(lines, directory):
+    run = json.loads((directory / "run-0-of-1.json").read_text(encoding="utf-8"))
+    event, = run["events"]
+    path = directory / event["checkpoint"]
+    identity = json.loads(path.read_text(encoding="utf-8"))["identity"]
+    result = read_checkpoint(path, identity)
+    if (result is None or path.stem != digest(identity) or event["record_id"] != identity["record_id"]
+            or event["status"] not in {"reused", "completed"}):
+        raise ValueError("Production checkpoint failed integrity verification")
+    lines.extend(["## Full-length production verification", "",
+                  f"The {result['model']['name']} preset with prompt mode `{result['prompt']['mode']}` "
+                  f"processed {result['audio_duration_seconds'] / 60:.2f} minutes of verified Stage 3 audio "
+                  f"and produced {len(result['segments'])} timestamped segments. Inference took "
+                  f"{result['inference']['wall_seconds']:.2f} seconds and sampled peak process RSS "
+                  f"was {result['inference']['rss_peak_sampled_bytes'] / 2**30:.2f} GiB. The recorded "
+                  f"checkpoint status was `{event['status']}`. Segment flags: "
+                  f"{len(result['quality']['segment_flags'])}. Repetition flags: "
+                  f"{len(result['quality']['repetition_flags'])}.", ""])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=Path("outputs/evaluation/clip_manifest.json"))
     parser.add_argument("--runs", type=Path, default=Path("outputs/evaluation/runs"))
     parser.add_argument("--rankings", type=Path, default=Path("outputs/evaluation/vocabulary_rankings.json"))
+    parser.add_argument("--production-run", type=Path)
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     coverage = manifest["coverage"]
@@ -133,6 +204,7 @@ def main():
                          f"domain F1 {percentage(row['term_f1'])}.")
         lines.append("")
     lines.extend([recommend(benchmark, adaptation), ""])
+    add_findings(lines, benchmark, adaptation)
     if adaptation:
         lines.extend(["## Prompt effects relative to each model's baseline", "",
                       "| Reference | Prompted condition | Paired WER change (pp) | Term F1 change (pp) |",
@@ -157,6 +229,8 @@ def main():
         lines.extend(["", "Unmatched counts are relative to the named reference. Membership in the prompt "
                       "and literal output sequences are diagnostic signals requiring caution. The "
                       "[term audit](term_errors.json) contains the most frequent unmatched terms.", ""])
+    if args.production_run:
+        add_production(lines, args.production_run)
     lines.extend(["## Limitations", "",
                   "Automated references can share errors and can differ on silence, singing, names, contractions, "
                   "numbers and word boundaries. These results measure agreement only. Domain counts match literal "

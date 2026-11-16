@@ -1,0 +1,24 @@
+# Provisional efficiency-oriented selection based on the held-out comparisons.
+[model]
+name = "small.en"
+revision = "d1d751a5f8271d482d14ca55d9e2deeebbae577f"
+local_files_only = true
+
+[hardware]
+device = "cpu"
+device_index = 0
+compute_type = "int8"
+cpu_threads = 4
+num_workers = 1
+
+[decoding]
+language = "en"
+task = "transcribe"
+beam_size = 5
+temperature = 0.0
+condition_on_previous_text = false
+vad_filter = false
+word_timestamps = false
+
+[prompt]
+mode = "none"

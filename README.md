@@ -202,3 +202,21 @@ acquisition failures are recorded locally. Refer to the [research plan](docs/ML_
 [local reproduction commands](docs/ML_RUNBOOK.md), and
 [vocabulary methodology](docs/VOCABULARY.md). Generated audio, predictions, metrics,
 figures and local model weights remain Git-ignored.
+
+### Local benchmark findings
+
+On 39 held-out clips, the unprompted baselines produced the following results on
+the same CPU INT8 settings. WER is relative to the named automated reference.
+
+| Model | WER relative to large-v3 | WER relative to wav2vec2 | Median inference per 60 s | Median sampled peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| base.en | 18.09% | 31.51% | 2.87 s | 648 MiB |
+| small.en | 8.68% | 27.13% | 7.97 s | 1,424 MiB |
+| medium.en | 8.01% | 25.99% | 22.28 s | 2,472 MiB |
+
+All three shared the same baseline domain-term F1 against each reference.
+Each prompted base.en and small.en condition lowered domain-term F1 against
+both references on this sample. The provisional production default is
+unprompted small.en on CPU INT8. It met the study's predeclared agreement and
+runtime thresholds against unprompted medium.en. The detailed local tables,
+figures and error audit are generated under `outputs/evaluation/runs/`.
