@@ -28,6 +28,11 @@ Civic Flourishing Index
 | `collectors/` | Church registry, platform adapters, collection dispatch, consolidation, and cached replay |
 | `processing/` | Metadata normalization, recording grouping, and Stage 2 reconciliation |
 | `media_ingestion/` | Eligibility, media transport, decoding, checkpoints, and reports |
+| `transcription/` | Local ASR inference, checkpointing, and Stage 3 handoff |
+| `evaluation/` | Seeded clip sampling, reference generation, and agreement metrics |
+| `vocabulary/` | Metadata-only lexical and semantic ranking and prompt budgeting |
+| `configs/` | Versioned model, evaluation, and vocabulary settings |
+| `docs/` | Research plan and reproduction instructions |
 | `tests/` | Offline regression tests |
 | `outputs/` | Git-ignored local research outputs |
 
@@ -36,7 +41,7 @@ Use Python 3.11 or newer. Run these commands from the repository root on macOS o
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-transcription.txt
 python -m unittest discover
 ```
 
@@ -182,3 +187,18 @@ All 66 automated tests passed offline. Corpus-wide media validation, audio inges
 - A successful probe establishes partial access. Video containers can require metadata beyond the fetched prefix, and full recording availability remains unverified.
 - HLS support covers unencrypted playlists. Encrypted, byte-range, and gap playlists are unsupported. Full HLS capture requires a completed playlist.
 - The 238 unsupported groups comprise 156 Google Drive and 82 Facebook references at the group level. An offline yt-dlp check recognized the URL formats for all 156 Drive groups and 78 Facebook groups. Four Facebook short share links need redirect resolution. Anonymous access, download permissions, and usable media transport remain unverified.
+
+## Local Transcription Research
+
+The study compares Whisper base.en, small.en and medium.en, then evaluates original,
+expanded and metadata-selected vocabulary prompts. Whisper large-v3 and independently
+trained wav2vec2-CTC serve as separate automated pseudo-references. Word, character and
+domain-term metrics describe reference-relative agreement. Human-validated accuracy
+remains unmeasured.
+
+The seed-20261116 sample contains 49 verified one-minute clips across 10 churches,
+with 10 development clips and 39 held-out clips. The missing 50th slot and all bounded
+acquisition failures are recorded locally. Refer to the [research plan](docs/ML_PLAN.md),
+[local reproduction commands](docs/ML_RUNBOOK.md), and
+[vocabulary methodology](docs/VOCABULARY.md). Generated audio, predictions, metrics,
+figures and local model weights remain Git-ignored.
