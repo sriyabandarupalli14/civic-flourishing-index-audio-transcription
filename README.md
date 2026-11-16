@@ -216,7 +216,29 @@ the same CPU INT8 settings. WER is relative to the named automated reference.
 
 All three shared the same baseline domain-term F1 against each reference.
 Each prompted base.en and small.en condition lowered domain-term F1 against
-both references on this sample. The provisional production default is
+both references on this sample. The production preset is
 unprompted small.en on CPU INT8. It met the study's predeclared agreement and
 runtime thresholds against unprompted medium.en. The detailed local tables,
 figures and error audit are generated under `outputs/evaluation/runs/`.
+
+### Experiment 2 extension: selective V4 prompting
+
+The V4 study compares unprompted small.en, the existing full-clip dynamic
+strategy, and two matched selective retry arms. The follow-up focuses on improving
+small.en. The model-size benchmark above uses its original cohort. Both V4 arms
+start from the same timed and verified V0 transcript. Only V4-B supplies hints
+to eligible retries. The independent sample contains 50 clips across
+10 churches, including 10 development and 40 held-out clips.
+
+The [V4 protocol and reproduction guide](docs/EXPERIMENT_2_V4.md) covers the
+metadata-based sampling, three development policies, frozen configuration
+checks and acceptance rules. Local checkpoints, paired metrics, error
+analysis and figures live under `outputs/evaluation_v4/`.
+
+### V4 held-out findings
+
+V4 was evaluated on 50 independent clips from 10 churches, with 10 for development and 40 held out. The frozen policy was `conservative`. V4-B retried 0 of 626 first-pass segments, supplied hints on 0 retries and accepted 0. The joint improvement criterion against V0 and V4-A did not pass. Relative to large-v3, V4-B WER was 6.30% and term F1 was 98.21%. V0 scored 6.30% WER and 98.21% term F1. Relative to wav2vec2, V4-B WER was 14.87% and term F1 was 87.31%. V0 scored 14.87% WER and 87.31% term F1. Median V4-B clip time was 13.17 s, including adaptation overhead. The follow-up compares small.en strategies. Experiment 1 contains the model-size comparison.
+
+The paired tables and figures are saved locally in `outputs/evaluation_v4/report/`.
+
+See the [consolidated ASR research findings](docs/ASR_RESEARCH_FINDINGS.md) for both cohorts, all completed vocabulary strategies, reference-relative metrics, and the production decision.

@@ -8,7 +8,7 @@ from pathlib import Path
 from evaluation.metrics import index_terms, occurrences, tokens
 from evaluation.results import load_predictions, compare, pool
 from media_ingestion.pipeline import hash_file
-from transcription.adaptive import has_loop
+from transcription.adaptive import has_loop, relevant_terms, triggers
 
 
 def freeze_inputs():
@@ -66,6 +66,8 @@ def diagnostics(predictions):
             accepted += event["outcome"] == "accepted"
             prompted += bool(event["prompt"]["selected_terms"])
             outcomes[event["outcome"]] += 1
+    phase_times = [result["adaptation_phase_inference"]["wall_seconds"] for result in predictions.values()
+                   if result.get("adaptation_phase_inference")]
     memory = [result["inference"]["rss_peak_sampled_bytes"] for result in predictions.values()]
     seconds = [result["inference"]["wall_seconds"] for result in predictions.values()]
     return {"clips": len(predictions), "repeat_clips": sum(has_loop(tokens(row["text"])) for row in predictions.values()),
@@ -73,6 +75,7 @@ def diagnostics(predictions):
             "retry_rate": retries / total_segments if total_segments else None,
             "acceptance_rate": accepted / retries if retries else None, "outcomes": dict(outcomes),
             "median_seconds": statistics.median(seconds) if seconds else None,
+            "median_adaptation_seconds": statistics.median(phase_times) if phase_times else None,
             "median_peak_rss_mib": statistics.median(memory) / 2**20 if memory else None}
 
 
@@ -80,3 +83,28 @@ def coverage(results, index):
     term_lists = [occurrences(tokens(row["text"]), index) for row in results.values()]
     return {"occurrences": sum(map(len, term_lists)), "clips_with_terms": sum(bool(item) for item in term_lists),
             "distinct_terms": len({term for terms in term_lists for _, term in terms})}
+
+
+def gate_funnel(predictions, clips, lexicon, policy):
+    """Explain abstentions before the per-clip retry cap, using saved V0 rows."""
+    counts = Counter()
+    for key, result in predictions.items():
+        for row in result["segments"]:
+            counts["segments"] += 1
+            reasons = triggers(row, policy)
+            if not reasons:
+                continue
+            counts["diagnostic_trigger"] += 1
+            duration = min(result["audio_duration_seconds"], row["end_seconds"]) - max(0, row["start_seconds"])
+            if not 1 <= duration <= policy["max_span_seconds"]:
+                counts["outside_duration_bounds"] += 1
+                continue
+            terms = relevant_terms(lexicon, clips[key]["source_record"], row["text"],
+                                   policy["relevance"], policy["term_limit"])
+            if terms:
+                counts["plausible_hint"] += 1
+            elif "repetition" in reasons:
+                counts["repetition_only"] += 1
+            else:
+                counts["insufficient_term_evidence"] += 1
+    return dict(counts)

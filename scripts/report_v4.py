@@ -7,11 +7,11 @@ import sys
 from pathlib import Path
 
 from evaluation.metrics import index_terms
-from evaluation.v4_analysis import checkpoint_set, clips_for, coverage, diagnostics, freeze_inputs
+from evaluation.v4_analysis import checkpoint_set, clips_for, coverage, diagnostics, freeze_inputs, gate_funnel
 from media_ingestion.pipeline import atomic_json, hash_file
 from vocabulary.retrieval import read_lexicon
 
-LABELS = ("V0", "V3", "V4-A", "V4-B", "medium")
+LABELS = ("V0", "V3", "V4-A", "V4-B")
 REFERENCES = ("large-v3", "wav2vec2")
 
 
@@ -26,7 +26,8 @@ def main():
     root = args.data
     report = root / "report"
     report.mkdir(exist_ok=True)
-    manifest = json.loads((root / "clip_manifest.json").read_text())
+    manifest_path = root / "clip_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
     old = json.loads(Path("outputs/evaluation/clip_manifest.json").read_text())["clips"]
     old_ids = {row["recording_id"] for row in old}
     old_sha = {row.get("clip_sha256") for row in old}
@@ -34,7 +35,8 @@ def main():
         if row["status"] == "ready" and (row["recording_id"] in old_ids or row["clip_sha256"] in old_sha
                                         or hash_file(root / row["clip_file"]) != row["clip_sha256"]):
             raise ValueError("Audio is duplicated from the earlier study or failed checksum verification")
-    terms = index_terms(item["term"] for item in read_lexicon(Path("configs/religious_lexicon.tsv")))
+    lexicon = read_lexicon(Path("configs/religious_lexicon.tsv"))
+    terms = index_terms(item["term"] for item in lexicon)
     samples = {subset: clips_for(root, subset) for subset in ("development", "held_out")}
     held = samples["held_out"]
     refs = {}
@@ -68,15 +70,24 @@ def main():
         command += ["--reference", f"{name}={root / 'runs' / name}"]
     for label in LABELS:
         command += ["--prediction", f"{label}={root / 'runs/held_out' / label}"]
-    for a, b in (("V4-A", "V0"), ("V4-B", "V0"), ("V4-B", "V4-A"), ("V4-B", "medium")):
+    for a, b in (("V4-A", "V0"), ("V4-B", "V0"), ("V4-B", "V4-A")):
         command += ["--compare", f"{a}={b}"]
     subprocess.run(command, check=True)
     comparison = json.loads((report / "comparison.json").read_text())
+    audit = [sys.executable, "-m", "scripts.audit_prompt_errors",
+             "--manifest", str(root / "clip_manifest.json"), "--output", str(report / "term_errors.json")]
+    for name in REFERENCES:
+        audit += ["--reference", f"{name}={root / 'runs' / name}"]
+    for label in LABELS:
+        audit += ["--prediction", f"{label}={root / 'runs/held_out' / label}"]
+    subprocess.run(audit, check=True)
+    term_audit = json.loads((report / "term_errors.json").read_text())["conditions"]
     freeze = json.loads((root / "frozen_policy.json").read_text())
-    if freeze["plan_sha256"] != manifest["plan_sha256"] or freeze["protocol_files_sha256"] != freeze_inputs():
+    if (freeze["plan_sha256"] != manifest["plan_sha256"] or freeze.get("manifest_sha256") != hash_file(manifest_path)
+            or freeze["protocol_files_sha256"] != freeze_inputs()):
         raise ValueError("Saved predictions cannot be reproduced from the frozen protocol")
+    funnel = gate_funnel(outputs["V0"], held, lexicon, freeze["policy"])
     paired = {(row["reference"], row["condition"]): row for row in comparison["summaries"]}
-    faster = 1 - stats["V4-B"]["median_seconds"] / stats["medium"]["median_seconds"]
     def improves(treatment, control):
         return (all(row[key] is not None for row in (treatment, control) for key in ("term_f1", "wer"))
                 and treatment["term_f1"] > control["term_f1"] and treatment["wer"] <= control["wer"])
@@ -92,12 +103,15 @@ def main():
                                "control_outcome": next(r["outcome"] for r in before["adaptation"]["events"]
                                                        if r["segment"] == event["segment"])})
     atomic_json(report / "diagnostics.json", {"coverage": refs, "conditions": stats,
-        "speed_advantage_over_medium": faster, "improved_over_both": improved, "freeze": freeze})
+        "improved_over_both": improved,
+        "pre_limit_gate_funnel": funnel, "freeze": freeze})
     atomic_json(report / "retry_examples.json", errors)
     lines = ["# Experiment 2 extension: selective V4 adaptation", "",
              f"The independent sample contains {len(samples['development'])} development and {len(held)} held-out "
              f"clips across {manifest['coverage']['ready_churches']} churches. The frozen policy was "
-             f"`{freeze['name']}`. Metrics measure agreement with independent automated references.", "",
+             f"`{freeze['name']}`. Metrics measure agreement with two automated references. "
+             "The follow-up tests improvement to small.en on the matched holdout. The original size benchmark "
+             "is reported separately, and the partial medium.en follow-up is excluded from all scores.", "",
              "## Reference terminology coverage", "",
              "| Subset | Reference | Occurrences | Distinct terms | Clips with terms |",
              "| --- | --- | ---: | ---: | ---: |"]
@@ -130,18 +144,36 @@ def main():
         lines.append(f"| {label} | {row['median_seconds']:.2f} | {row['median_peak_rss_mib']:.1f} "
                      f"| {row['repeat_clips']} | {row['retries']}/{row['segments']} ({percent(row['retry_rate'])}) "
                      f"| {row['accepted']}/{row['retries']} ({percent(row['acceptance_rate'])}) |")
-    lines += ["", "### Retry decisions", ""]
+    lines += ["", "### Retry decisions", "",
+              f"{funnel.get('diagnostic_trigger', 0)} of {funnel['segments']} first-pass segments triggered a "
+              f"diagnostic. Before the per-clip cap, {funnel.get('plausible_hint', 0)} had a plausible hint "
+              f"and {funnel.get('repetition_only', 0)} qualified for an unprompted repetition retry.", ""]
+    for label in ("V4-A", "V4-B"):
+        overhead = stats[label]["median_adaptation_seconds"]
+        if overhead is not None:
+            lines.append(f"- {label} median adaptation overhead was {overhead:.4f} seconds per clip.")
     for label in ("V4-A", "V4-B"):
         outcomes = ", ".join(f"{key} ({count})" for key, count in sorted(stats[label]["outcomes"].items()))
         lines.append(f"- {label} recorded {outcomes or 'zero retries'}.")
-    lines += ["", f"V4-B used {percent(faster)} less median time than medium.en. "
-              f"The joint improvement check against V0 and V4-A {'passed' if improved else 'did not pass'}.", "",
+    lines += ["", f"The joint improvement check against V0 and V4-A {'passed' if improved else 'did not pass'}.", "",
               f"V4-B supplied hints on {stats['V4-B']['prompted_retries']} of {stats['V4-B']['retries']} held-out retries.",
               "V4 end-to-end cost sums separately measured V0 and adaptation wall times. The reported "
               "V4 peak RSS is the larger phase peak. V3 includes live metadata ranking.",
-              "See the retry examples for span-level hypotheses and rejection reasons.", "",
-              "The sample enriches terminology through metadata. Shared churches, imperfect references, and near-ceiling "
-              "baseline terminology recall limit conclusions about generalization. Sampled process RSS and local CPU "
+              "See the [retry examples](retry_examples.json) for span-level hypotheses and rejection reasons.", "",
+              "## Terminology error analysis", ""]
+    for row in term_audit:
+        if row["condition"] not in {"V0", "V3", "V4-B"}:
+            continue
+        frequent = ", ".join(f"{term} ({count})" for term, count in row["top_unmatched_terms"][:3]) or "none"
+        lines.append(f"- {row['condition']} relative to {row['reference']} had "
+                     f"{row['unmatched_hypothesis_terms']} unmatched term occurrences. Most frequent were {frequent}.")
+    lines += ["",
+              "See the [term audit](term_errors.json), [paired metrics](comparison.json), "
+              "[per-church results](per_church.csv), [agreement figures](asr_comparison.png), "
+              "[runtime and memory](runtime_memory.png), and [agreement versus cost](agreement_cost.png).", "",
+              "The sample enriches terminology through metadata. Early sermon windows, shared churches, limited retry "
+              "exposure, and imperfect references constrain generalization. large-v3 shares the Whisper model family. "
+              "wav2vec2 supplies a separate ASR architecture. Sampled process RSS and local CPU "
               "timings characterize this workstation and configuration.", ""]
     (report / "V4_REPORT.md").write_text("\n".join(lines), encoding="utf-8")
     print(report / "V4_REPORT.md")

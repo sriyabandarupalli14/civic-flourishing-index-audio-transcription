@@ -63,7 +63,7 @@ The production output contains text and timestamped segments with low confidence
 
 Use the same reference and prediction paths with `scripts.audit_prompt_errors` to write `term_errors.json` under the run directory. It counts unmatched lexicon occurrences, how many were offered as hints, and literal appearances of the first three hints together. These diagnostics are reference-relative. A prompt-term mismatch alone cannot identify an actual hallucination. Then run `python3 -m scripts.render_ml_report` to rebuild the local research report from the saved comparisons, frozen settings, retrieval rankings and term audit. Add `--production-run outputs/transcription/production_small` to include verified full-length checkpoint statistics.
 
-The provisional production preset is `configs/production.toml`. It uses
+The production preset is `configs/production.toml`. It uses
 small.en unprompted on four CPU threads with INT8. Use it on explicitly
 selected verified audio as follows:
 

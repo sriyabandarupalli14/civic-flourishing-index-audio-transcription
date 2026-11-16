@@ -1,4 +1,4 @@
-# Provisional efficiency-oriented selection based on the held-out comparisons.
+# Final efficiency-oriented selection. See docs/ASR_RESEARCH_FINDINGS.md.
 [model]
 name = "small.en"
 revision = "d1d751a5f8271d482d14ca55d9e2deeebbae577f"

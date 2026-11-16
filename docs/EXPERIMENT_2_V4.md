@@ -82,3 +82,9 @@ The saved manifest resolves clips relative to its own directory. Acquisition
 ledgers retain the original capture paths and hashes. For archived prefix
 re-materialization after relocation, use the matching basename in the copied
 prefix cache and verify the original recorded checksum.
+
+## V4 held-out findings
+
+V4 was evaluated on 50 independent clips from 10 churches, with 10 for development and 40 held out. The frozen policy was `conservative`. V4-B retried 0 of 626 first-pass segments, supplied hints on 0 retries and accepted 0. The joint improvement criterion against V0 and V4-A did not pass. Relative to large-v3, V4-B WER was 6.30% and term F1 was 98.21%. V0 scored 6.30% WER and 98.21% term F1. Relative to wav2vec2, V4-B WER was 14.87% and term F1 was 87.31%. V0 scored 14.87% WER and 87.31% term F1. Median V4-B clip time was 13.17 s, including adaptation overhead. The follow-up compares small.en strategies. Experiment 1 contains the model-size comparison.
+
+The paired tables and figures are saved locally in `outputs/evaluation_v4/report/`.
