@@ -58,3 +58,36 @@ To reproduce the offline comparison, run `python3 collect_stage1b.py --reference
 - Entries #8 and #18 remain inactive. Entry #8 contributes saved observations only. Entries #18, #21, #31, and #33 have no retained observations. The November review held out 959 unrelated channel observations associated with #31.
 - Some archives were unavailable or incomplete in the saved evidence. Candidate identities, attachment relevance, shared archives, and blocked Drive listings remain open. Missing captures prevented full replay equivalence for some routes.
 - Offline verification establishes what can be recovered and compared from saved evidence. It does not establish live archive completeness, current media availability, or playback. Signed URLs may expire. Final metadata validation, deduplication, and media accessibility checks are pending.
+
+## Data Cleaning and Deduplication
+
+Stage 2 processes the Stage 1 consolidated CSV offline. It standardizes whitespace and recognized missing values, parses dates into ISO calendar dates while preserving their source meaning, and converts durations to seconds.
+
+### Duplicate Detection and Grouping
+
+1. **Exact duplicates.** The pipeline collapses repeated normalized payloads when the church, scoped source identifiers, metadata, date meaning, exact typed references, and review flags agree. Rows without reliable reference evidence require a verbatim match within the same church scope.
+2. **Recording groups.** A church ID and a scoped platform or message ID can tie multiple observations to one group. An exact file or individual player URL can group otherwise unidentified observations when the metadata is compatible, or attach them to one unambiguous platform group.
+3. **Review boundaries.** Titles, URL paths, and shared stream endpoints alone do not trigger a merge. Full query strings are retained. Conflicting platform IDs and cross-church matches stay separate for review.
+
+### Provenance and Outputs
+
+The input CSV remains unchanged. A lineage table links every input record to its exact-payload representative and provisional recording group, including source observation IDs and evidence locators where available. The manifest retains alternate audio, video, stream, and player URLs alongside unresolved endpoints and non-media assets. Normalized metadata variants remain available when display fields differ across observations.
+
+Run `python3 process_stage2.py` from the repository root with the Stage 1 consolidated CSV available locally. The Git-ignored Stage 2 output directory contains the recording manifest, the partition without classified media, a review subset spanning both partitions, the lineage table, and the before-and-after report.
+
+### Before and After
+
+| Measure | Count |
+| --- | ---: |
+| Stage 1 input observations | 17,225 |
+| Verbatim repeated input rows | 0 |
+| Exact normalized payload repeats collapsed | 528 |
+| Observations after exact deduplication | 16,697 |
+| Further observations combined through identifier or reference grouping | 2,165 |
+| **Provisional recording groups** | **14,532** |
+| Groups with a classified media reference | 14,190 |
+| Groups without classified media, including three with unresolved endpoints | 342 |
+| Groups flagged for review across both partitions | 3,567 |
+| Automated tests passed | 52 |
+
+Review flags cover unresolved church or campus identities, shared archives and cross-church references, conflicting metadata or platform identifiers, signed URL variants, attachment relevance, and absent or malformed media references. Some input references were player-library scripts and remain recorded separately from media. Flags can overlap. Group counts remain provisional pending review, and no live accessibility or playback check was performed.
