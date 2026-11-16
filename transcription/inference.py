@@ -11,7 +11,7 @@ from threading import Event, Thread
 from media_ingestion.pipeline import hash_file
 
 from .checkpoints import digest
-from .quality import repetition_flags
+from .quality import assess_quality
 
 
 @contextmanager
@@ -44,11 +44,12 @@ def measure_resources(interval=0.02):
 
 
 class WhisperInference:
-    def __init__(self, config, *, model_dir=None):
+    def __init__(self, config, *, model_dir=None, prompt_selector=None):
         from faster_whisper import WhisperModel
         from faster_whisper.utils import download_model
 
         self.config = config
+        self.prompt_selector = prompt_selector
         settings = config["model"]
         snapshot = Path(model_dir) if model_dir is not None else Path(download_model(
             settings["name"], revision=settings.get("revision"),
@@ -73,11 +74,20 @@ class WhisperInference:
         audio_sha = hash_file(audio)
         if expected_sha256 is not None and audio_sha != expected_sha256:
             raise ValueError("Audio checksum does not match the input manifest")
-        options = inspect.signature(self.model.transcribe).bind(str(audio), **self.config["decoding"])
+        decoding = dict(self.config["decoding"])
+        prompt = dict(self.config["prompt"])
+        if self.prompt_selector is not None:
+            from vocabulary.prompts import prepare_prompt
+
+            terms = self.prompt_selector(metadata or {})
+            decoding["hotwords"], prompt["token_usage"] = prepare_prompt(
+                self.model, decoding, terms, prompt["hotword_budget"],
+            )
+        options = inspect.signature(self.model.transcribe).bind(str(audio), **decoding)
         options.apply_defaults()
         effective = {name: value for name, value in options.arguments.items() if name != "audio"}
         with measure_resources() as inference:
-            segments, info = self.model.transcribe(str(audio), **self.config["decoding"])
+            segments, info = self.model.transcribe(str(audio), **decoding)
             rows = [{
                 "id": segment.id, "start_seconds": segment.start, "end_seconds": segment.end,
                 "text": segment.text.strip(), "avg_logprob": segment.avg_logprob,
@@ -87,14 +97,12 @@ class WhisperInference:
                                probability=w.probability) for w in segment.words] if segment.words else [],
             } for segment in segments]
         text = " ".join(row["text"] for row in rows).strip()
-        flags = repetition_flags(text)
         return {
             "audio_file": str(audio), "audio_sha256": audio_sha, "audio_duration_seconds": info.duration,
             "metadata": metadata or {}, "model": self.model_provenance, "software_versions": self.software,
-            "configuration_sha256": self.configuration_sha256, "hardware": self.hardware, "decoding": effective, "prompt": self.config["prompt"],
+            "configuration_sha256": self.configuration_sha256, "hardware": self.hardware, "decoding": effective, "prompt": prompt,
             "model_initialization": self.initialization, "inference": inference,
             "language": info.language, "language_probability": info.language_probability,
             "text": text, "segments": rows, "human_reviewed": False,
-            "quality": {"empty_transcript": not text, "repetition_flags": flags,
-                        "needs_review": not text or bool(flags)},
+            "quality": assess_quality(text, rows, info.duration),
         }
