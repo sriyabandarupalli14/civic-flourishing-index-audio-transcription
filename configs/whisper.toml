@@ -1,0 +1,25 @@
+[model]
+name = "base.en"
+local_files_only = true
+# Set name to small.en, medium.en, or large-v3 for another experiment.
+# Set revision to a model commit or use --model-dir for an existing snapshot.
+
+[hardware]
+device = "cpu"
+device_index = 0
+compute_type = "int8"
+cpu_threads = 4
+num_workers = 1
+
+[decoding]
+language = "en"
+task = "transcribe"
+beam_size = 5
+temperature = 0.0
+condition_on_previous_text = false
+vad_filter = false
+word_timestamps = false
+
+[prompt]
+mode = "static"
+vocabulary = "sermon_vocabulary.json"

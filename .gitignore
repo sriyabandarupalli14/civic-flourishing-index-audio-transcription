@@ -86,3 +86,6 @@ pytorch_model*.bin
 *.webm
 *.part
 *.ipynb.zip
+
+# Local ML research progress
+/ML_PROGRESS.md
