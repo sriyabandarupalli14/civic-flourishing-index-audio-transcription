@@ -6,6 +6,26 @@ The Civic Flourishing Index (CFI) is a research initiative at UC Berkeley that a
 
 This repository focuses on the development of an end-to-end pipeline for collecting, processing, and transcribing church sermons to support the study of civic life within religious institutions.
 
+## Project status
+
+| Stage | Result |
+| --- | --- |
+| Collect sermon references | 44 church sources reviewed. The saved export contains 17,225 raw observations representing 40 churches. |
+| Clean and group metadata | 14,532 provisional recording groups with source provenance and review flags. |
+| Plan media validation | 12,092 eligible candidates. A bounded pilot produced five decodable previews. |
+| Develop and evaluate transcription | Local Whisper pipeline and research complete. The production preset is unprompted small.en. |
+| Deploy and deliver | Corpus-wide media validation, Savio transcription, quality checks, and final Parquet export remain pending. |
+
+The pipeline goes from archive listings to a recording manifest, then verifies
+and normalizes full audio before Whisper writes timestamped transcripts. The
+project keeps research data and model weights in local or approved storage.
+This repository contains code, documentation, and aggregate results. Full
+historical reproduction requires separately authorized access to the original
+captures, manifests, audio, model snapshots, and saved predictions.
+
+Start with the [research findings](docs/ASR_RESEARCH_FINDINGS.md),
+[poster figures](docs/figures/README.md), or [production handoff](docs/PRODUCTION_HANDOFF.md).
+
 ## Project Objectives
 
 - Automate sermon collection across heterogeneous websites and media platforms.
@@ -24,7 +44,7 @@ Civic Flourishing Index
 
 | Directory | Purpose |
 | --- | --- |
-| `scripts/` | Command-line entry points for collection, replay, cleaning, and media ingestion |
+| `scripts/` | Command-line entry points for each pipeline stage and verification |
 | `collectors/` | Church registry, platform adapters, collection dispatch, consolidation, and cached replay |
 | `processing/` | Metadata normalization, recording grouping, and Stage 2 reconciliation |
 | `media_ingestion/` | Eligibility, media transport, decoding, checkpoints, and reports |
@@ -32,17 +52,22 @@ Civic Flourishing Index
 | `evaluation/` | Seeded clip sampling, reference generation, and agreement metrics |
 | `vocabulary/` | Metadata-only lexical and semantic ranking and prompt budgeting |
 | `configs/` | Versioned model, evaluation, and vocabulary settings |
-| `docs/` | Research plan and reproduction instructions |
+| `docs/` | Research findings, reproduction, production handoff, and poster figures |
 | `tests/` | Offline regression tests |
 | `outputs/` | Git-ignored local research outputs |
 
-Use Python 3.11 or newer. Run these commands from the repository root on macOS or Linux.
+Use Python 3.11, the version used for local verification. Run these commands from
+the repository root. The collection and media dependencies are in
+`requirements.txt`. The complete environment, including inference, evaluation,
+and figure rendering, is in `requirements-transcription.txt`. The benchmark
+used macOS ARM64. Verify Linux and accelerator compatibility on Savio before
+production use.
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-transcription.txt
-python -m unittest discover
+python -m unittest discover -s tests
 ```
 
 Chromium is required for live collectors that use Playwright. Install it with
@@ -58,6 +83,9 @@ Run them from the repository root with `python3 -m scripts.<module>`.
 | `scripts.collect_stage1b` | Replay historical captures and build the all-44 consolidation offline. Pass `--reference` for the original research directory. |
 | `scripts.process_stage2` | Reconcile the consolidated CSV and produce the Stage 2 manifests offline. |
 | `scripts.ingest_media` | Plan or report offline, or probe and ingest explicitly selected recording IDs. |
+| `scripts.transcribe_recordings` | Transcribe explicitly selected full-audio checkpoints using the pinned production config. |
+| `scripts.score_asr`, `scripts.report_v4` | Rebuild scores from saved checkpoints. See the [research runbook](docs/ML_RUNBOOK.md). |
+| `scripts.render_poster_figures` | Rebuild the poster figures from saved aggregate metrics. |
 
 ## Data Collection
 
@@ -82,9 +110,8 @@ Stage 1 reviewed all 44 church entries in the master registry. It collected and 
 | **Consolidated raw observations** | **17,225** |
 | Offline cache-replay rows, counted separately | 10,882 |
 | Stage 1B observations without a media reference | 48 |
-| Automated tests passed | 41 |
 
-One observation can represent a source listing, a file or player reference, or another appearance of the same recording. The export retains repeats, alternate media references, and potentially overlapping archives. A unique sermon count awaits record reconciliation and deduplication.
+One observation can represent a source listing, a file or player reference, or another appearance of the same recording. The export retains repeats, alternate media references, and potentially overlapping archives. Stage 2 groups these observations provisionally. The number of unique sermons remains unresolved.
 
 ### Cached Replay and Verification
 
@@ -96,7 +123,7 @@ To reproduce the offline comparison, run `python3 -m scripts.collect_stage1b --r
 
 - Entries #8 and #18 remain inactive. Entry #8 contributes saved observations only. Entries #18, #21, #31, and #33 have no retained observations. The November review held out 959 unrelated channel observations associated with #31.
 - Some archives were unavailable or incomplete in the saved evidence. Candidate identities, attachment relevance, shared archives, and blocked Drive listings remain open. Missing captures prevented full replay equivalence for some routes.
-- Offline verification establishes what can be recovered and compared from saved evidence. It does not establish live archive completeness, current media availability, or playback. Signed URLs may expire. Final metadata validation, deduplication, and media accessibility checks are pending.
+- Offline verification establishes what can be recovered and compared from saved evidence. It does not establish live archive completeness, current media availability, or playback. Signed URLs may expire. Further identity review and media accessibility checks are pending.
 
 ## Data Cleaning and Deduplication
 
@@ -180,7 +207,7 @@ A live pilot on six selected recording groups used a 15-second target and an 8 M
 | SoundCloud | The player resolved to HLS, the first segment probe succeeded, and a preview decoded. |
 | HLS | A BoxCast reference expired. Refresh recovered a stream for the same broadcast, and a preview decoded. |
 
-All 66 automated tests passed offline. Corpus-wide media validation, audio ingestion, and transcription are pending.
+Corpus-wide media validation, audio ingestion, and transcription are pending.
 
 ### Known Limitations
 
@@ -242,3 +269,35 @@ V4 was evaluated on 50 independent clips from 10 churches, with 10 for developme
 The paired tables and figures are saved locally in `outputs/evaluation_v4/report/`.
 
 See the [consolidated ASR research findings](docs/ASR_RESEARCH_FINDINGS.md) for both cohorts, all completed vocabulary strategies, reference-relative metrics, and the production decision.
+
+### Vocabulary strategies and production
+
+| Strategy | Method and result |
+| --- | --- |
+| V0 | Unprompted baseline and production choice. |
+| V1 | Original static vocabulary. Small.en terminology F1 fell on both references in the original study. |
+| V2 | Expanded category-balanced vocabulary. Small.en terminology F1 also fell on both references. |
+| V3 | Metadata-ranked vocabulary with lexical and semantic retrieval. Small.en had lower terminology F1 than V0 on both cohorts. |
+| V4-A and V4-B | Selective two-pass retry without and with hints, respectively. V4 flagged three of 626 segments and retried zero. Both variants reproduced V0 on the follow-up. |
+
+The initial held-out study used **39 clips**. The recording-disjoint follow-up
+used **40 clips** and compares only small.en strategies. The original
+Small-versus-Medium benchmark uses the initial cohort exclusively. The report
+excludes the incomplete Medium follow-up and canceled V5 from performance metrics.
+
+On the initial cohort, unprompted small.en took **64.23% less median inference
+time** than medium.en, with the same terminology F1 against each reference.
+The pinned CPU INT8 production preset uses four threads, beam size five, and
+no prompts. V4 remains an opt-in research feature through its dedicated
+evaluation entry points and is disabled in production. The 105-term lexicon,
+retrieval algorithms, and V4 implementation remain available for future work.
+See the [comparative report](docs/ASR_RESEARCH_FINDINGS.md) and
+[V4 protocol](docs/EXPERIMENT_2_V4.md).
+
+## Production and dataset delivery
+
+Follow the [Savio and Parquet handoff checklist](docs/PRODUCTION_HANDOFF.md)
+to stage approved data, verify one compute-node shard, run the batch with
+checkpoint reuse, review outputs, and export the approved dataset. The local
+50.45-minute checkpoint validates the production interface and provenance.
+Savio execution and final dataset generation are still pending.

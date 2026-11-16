@@ -14,6 +14,10 @@ cookies.txt
 .pypirc
 id_rsa
 id_ed25519
+.aws/
+.ssh/
+*.p12
+*.pfx
 
 # Python, Jupyter, and macOS
 __pycache__/
@@ -26,10 +30,7 @@ __pycache__/
 
 # Local research inputs, collection evidence, and generated outputs
 /raw/
-/data/raw/
-/data/transcripts/
-/data/intermediate/
-/data/processed/
+/data/
 /datasets/
 /sermon_master_sheet*.csv
 /triage_results.csv
@@ -50,6 +51,7 @@ __pycache__/
 /logs/
 /models/
 /checkpoints/
+*.parquet
 /whisper_vocabulary_evaluation_*/clips/
 /whisper_vocabulary_evaluation_*/predictions/
 /whisper_vocabulary_evaluation_*/predictions.csv
