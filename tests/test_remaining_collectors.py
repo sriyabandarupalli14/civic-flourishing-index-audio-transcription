@@ -13,8 +13,8 @@ from collectors import (boxcast, nextjs, sermoncloud, site_media_api, soundcloud
 from collectors.metadata import MetadataClient, MetadataResponse
 from collectors.remaining import NEW_KEYS
 from collectors.registry import CHURCHES, CHURCH_BY_KEY
-from collection_outputs import consolidate
-from sermon_collectors import collect_church
+from collectors.outputs import consolidate
+from collectors.dispatch import collect_church
 
 SOURCE = "https://example.test"
 SIGNED = "https://cdn.example.test/recording.mp3?sig=a%2Bb"
@@ -87,7 +87,7 @@ class RemainingTests(unittest.TestCase):
 
     def test_cli_dispatch_and_consolidated_row_preservation(self):
         church = CHURCH_BY_KEY["christian_valley"]
-        with patch("sermon_collectors.collect_remaining") as collect:
+        with patch("collectors.dispatch.collect_remaining") as collect:
             collect_church(church)
             collect.assert_called_once_with(church, Path("outputs/sermon_collection"))
         with TemporaryDirectory() as root:

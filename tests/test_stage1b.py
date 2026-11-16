@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from bs4 import BeautifulSoup
 
-from collect_stage1b import collect, compare_replay, read_rows, write_csv
+from collectors.replay import collect, compare_replay, read_rows, write_csv
 from collectors.archive_cache import ArchiveCache, MissingCapture, PASS, SPRINT
 from collectors.archive_extractors import drive_media, flat_youtube, jwplayer_references, rss_enclosures, wordpress_attachments
 from collectors.registry import CHURCHES

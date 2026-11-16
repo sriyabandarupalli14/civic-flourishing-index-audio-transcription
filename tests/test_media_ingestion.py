@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from ingest_media import plan, report_outputs
+from media_ingestion.reporting import plan, report_outputs
 from media_ingestion.audio import decode_audio
 from media_ingestion.eligibility import assess
 from media_ingestion.hls import load_playlist, parse_playlist, stage_hls

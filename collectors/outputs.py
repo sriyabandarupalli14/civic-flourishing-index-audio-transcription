@@ -1,11 +1,9 @@
 """Combine selected local Stage 1 outputs without changing or deduplicating their rows."""
 
-import argparse
 import csv
 import json
-from pathlib import Path
 
-from collectors.registry import CHURCHES
+from .registry import CHURCHES
 
 
 def consolidate(directory):
@@ -47,14 +45,3 @@ def consolidate(directory):
         json.dumps(summary, indent=2) + "\n", encoding="utf-8",
     )
     return summary
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("outputs/sermon_collection"))
-    args = parser.parse_args()
-    print(json.dumps(consolidate(args.output), indent=2))
-
-
-if __name__ == "__main__":
-    main()

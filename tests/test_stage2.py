@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from process_stage2 import reconcile
+from processing.pipeline import reconcile
 from processing.grouping import group_observations, manifest_record
 from processing.normalize import exact_payload, normalize, normalize_date, normalize_duration
 

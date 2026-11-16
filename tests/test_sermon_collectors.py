@@ -9,7 +9,7 @@ from unittest.mock import patch
 from collectors.registry import CHURCHES, CHURCH_BY_KEY
 from collectors.schema import Collection, Sermon, write_results
 from collectors.shared import public_url
-from sermon_collectors import collect_church, collect_prattville, collect_sermonnet, fetch_metadata
+from collectors.dispatch import collect_church, collect_prattville, collect_sermonnet, fetch_metadata
 
 
 class CollectorTests(unittest.TestCase):

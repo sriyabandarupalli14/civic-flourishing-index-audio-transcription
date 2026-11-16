@@ -1,16 +1,15 @@
 """Replay November metadata caches and combine Stage 1 observations offline."""
 
-import argparse
 import csv
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-
-from collectors.archive_cache import ArchiveCache, SPRINT
-from collectors.registry import CHURCHES
-from collectors.stage1b_routes import ROUTES, Replay, run_replay
 from xml.etree.ElementTree import ParseError
+
+from .archive_cache import ArchiveCache, SPRINT
+from .registry import CHURCHES
+from .stage1b_routes import ROUTES, Replay, run_replay
 
 MEDIA_FIELDS = ("media_url", "audio_url", "video_url", "player_url")
 
@@ -181,16 +180,3 @@ def collect(reference, first20, output, *, replayer=run_replay):
     }
     (output / "first44_collection_summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return summary
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reference", type=Path, required=True, help="Original research directory (read-only)")
-    parser.add_argument("--first20", type=Path, default=Path("outputs/sermon_collection/combined_stage1_first20.csv"))
-    parser.add_argument("--output", type=Path, default=Path("outputs/sermon_collection/stage1b"))
-    args = parser.parse_args()
-    print(json.dumps(collect(args.reference, args.first20, args.output), indent=2))
-
-
-if __name__ == "__main__":
-    main()

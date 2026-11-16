@@ -1,6 +1,5 @@
 """Clean and reconcile Stage 1 observations without network access."""
 
-import argparse
 import csv
 import json
 from collections import Counter, defaultdict
@@ -8,8 +7,8 @@ from hashlib import file_digest
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from processing.grouping import MEDIA, group_observations, manifest_record
-from processing.normalize import exact_payload, normalize
+from .grouping import MEDIA, group_observations, manifest_record
+from .normalize import exact_payload, normalize
 
 DEFAULT_INPUT = Path("outputs/sermon_collection/stage1b/combined_stage1_first44.csv")
 DEFAULT_OUTPUT = Path("outputs/sermon_collection/stage2")
@@ -208,15 +207,3 @@ sermon counts remain unverified.
 
 {flags}
 """
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    config = parser.parse_args()
-    print(json.dumps(reconcile(config.input, config.output), indent=2))
-
-
-if __name__ == "__main__":
-    main()

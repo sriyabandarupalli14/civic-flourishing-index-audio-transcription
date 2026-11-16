@@ -1,15 +1,11 @@
-"""CLI and compatibility entry points for the Stage 1 collectors."""
+"""Dispatch active churches to their configured Stage 1 collectors."""
 
-import argparse
-import json
-import sys
 from pathlib import Path
 
-from collectors import adventist, sermon_browser, sermonnet, wordpress_churches
-from collectors.registry import CHURCH_BY_KEY
-from collectors.remaining import NEW_KEYS, collect_remaining
-from collectors.schema import Collection, Sermon, write_results
-from collectors.sermon_browser import fetch_sermon_browser_metadata as fetch_metadata
+from . import adventist, sermon_browser, sermonnet, wordpress_churches
+from .registry import CHURCH_BY_KEY
+from .remaining import NEW_KEYS, collect_remaining
+from .sermon_browser import fetch_sermon_browser_metadata as fetch_metadata
 
 GRACE = CHURCH_BY_KEY["grace_fellowship"]
 PRATTVILLE = CHURCH_BY_KEY["prattville_community"]
@@ -23,6 +19,7 @@ WORDPRESS_COLLECTORS = {
     "vernon_church_of_christ": wordpress_churches.collect_vernon,
     "pickens_baptist_association": wordpress_churches.collect_pickens,
 }
+
 
 def collect_sermonnet(archive_url=GRACE_ARCHIVE, fetch=sermonnet.fetch_metadata):
     """Collect Grace Fellowship with its configured posting-date timezone."""
@@ -57,32 +54,3 @@ def collect_church(church, *, output=Path("outputs/sermon_collection")):
     if church.key in NEW_KEYS:
         return collect_remaining(church, output)
     raise ValueError(f"No collector for {church.platform}")
-
-
-def main():
-    active_churches = {
-        key: church
-        for key, church in CHURCH_BY_KEY.items() if church.status == "active"
-    }
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("church", choices=["all", *active_churches], nargs="?", default="all")
-    parser.add_argument("--output", type=Path, default=Path("outputs/sermon_collection"))
-    args = parser.parse_args()
-    failures = []
-    for name, church in active_churches.items():
-        if args.church in {"all", name}:
-            try:
-                result = collect_church(church, output=args.output)
-            except Exception as error:
-                if args.church != "all":
-                    raise
-                failures.append(name)
-                print(f"{name}: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
-                continue
-            print(name, json.dumps(write_results(args.output, name, result), indent=2), flush=True)
-    if failures:
-        raise SystemExit("Failed collectors: " + ", ".join(failures))
-
-
-if __name__ == "__main__":
-    main()

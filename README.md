@@ -20,6 +20,40 @@ University of California, Berkeley\
 Data Discovery Program\
 Civic Flourishing Index
 
+## Repository Setup
+
+| Directory | Purpose |
+| --- | --- |
+| `scripts/` | Command-line entry points for collection, replay, cleaning, and media ingestion |
+| `collectors/` | Church registry, platform adapters, collection dispatch, consolidation, and cached replay |
+| `processing/` | Metadata normalization, recording grouping, and Stage 2 reconciliation |
+| `media_ingestion/` | Eligibility, media transport, decoding, checkpoints, and reports |
+| `tests/` | Offline regression tests |
+| `outputs/` | Git-ignored local research outputs |
+
+Use Python 3.11 or newer. Run these commands from the repository root on macOS or Linux.
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m unittest discover
+```
+
+Chromium is required for live collectors that use Playwright. Install it with
+`python -m playwright install chromium` before running those collectors.
+
+The command-line modules retain their existing arguments and default output paths.
+Run them from the repository root with `python3 -m scripts.<module>`.
+
+| Module | Operation |
+| --- | --- |
+| `scripts.sermon_collectors` | Collect metadata for an active church key or `all`. Use `--help` for supported keys. This uses live sources. |
+| `scripts.collection_outputs` | Combine saved first-20 church outputs. Use `--output` to point to their directory. |
+| `scripts.collect_stage1b` | Replay historical captures and build the all-44 consolidation offline. Pass `--reference` for the original research directory. |
+| `scripts.process_stage2` | Reconcile the consolidated CSV and produce the Stage 2 manifests offline. |
+| `scripts.ingest_media` | Plan or report offline, or probe and ingest explicitly selected recording IDs. |
+
 ## Data Collection
 
 Stage 1 reviewed all 44 church entries in the master registry. It collected and preserved sermon references and source metadata from heterogeneous websites and media platforms.
@@ -51,7 +85,7 @@ One observation can represent a source listing, a file or player reference, or a
 
 Stage 1B replayed saved November HTML, JSON, and feed responses without network access. The comparison checks exact media references and available titles, dates, speakers, and durations against the preserved observations. The consolidated CSV carries forward saved observations, with replay rows stored separately to avoid counting them again. The full consolidation was verified with HTTP requests disabled.
 
-To reproduce the offline comparison, run `python3 collect_stage1b.py --reference "$CFI_REFERENCE"` with `CFI_REFERENCE` set to the original research directory and the Stage 1A combined CSV available locally. Generated CSVs, coverage reports, and replay results are Git-ignored.
+To reproduce the offline comparison, run `python3 -m scripts.collect_stage1b --reference "$CFI_REFERENCE"` with `CFI_REFERENCE` set to the original research directory and the Stage 1A combined CSV available locally. Generated CSVs, coverage reports, and replay results are Git-ignored.
 
 ### Known Limitations
 
@@ -73,7 +107,7 @@ Stage 2 processes the Stage 1 consolidated CSV offline. It standardizes whitespa
 
 The input CSV remains unchanged. A lineage table links every input record to its exact-payload representative and provisional recording group, including source observation IDs and evidence locators where available. The manifest retains alternate audio, video, stream, and player URLs alongside unresolved endpoints and non-media assets. Normalized metadata variants remain available when display fields differ across observations.
 
-Run `python3 process_stage2.py` from the repository root with the Stage 1 consolidated CSV available locally. The Git-ignored Stage 2 output directory contains the recording manifest, the partition without classified media, a review subset spanning both partitions, the lineage table, and the before-and-after report.
+Run `python3 -m scripts.process_stage2` from the repository root with the Stage 1 consolidated CSV available locally. The Git-ignored Stage 2 output directory contains the recording manifest, the partition without classified media, a review subset spanning both partitions, the lineage table, and the before-and-after report.
 
 ### Before and After
 
@@ -117,13 +151,13 @@ The revised rules released 1,360 warning-only groups. These include 593 groups w
 - Ingestion stages a bounded file or a selection of HLS segments. PyAV extracts and decodes the audio to mono 16 kHz PCM WAV. The pipeline records decoded duration, sample rate, channel count, and a file checksum.
 - Retryable failures use bounded retries. The pipeline can try alternate references from the same group and refresh signed URLs through known public BoxCast and Adventist routes. Local JSONL logs record attempts and failure reasons. Verified WAV checkpoints can be reused when the inputs and settings match.
 
-From the repository root, use Python 3.11 or newer with Requests, yt-dlp, Beautiful Soup, and PyAV. The Stage 2 manifest must be available locally. Substitute an eligible ID for `RECORDING_ID` in the two network commands.
+Install the dependencies above and make the Stage 2 manifest available locally. Substitute an eligible ID for `RECORDING_ID` in the two network commands.
 
 ```sh
-python3 ingest_media.py plan
-python3 ingest_media.py probe --recording RECORDING_ID
-python3 ingest_media.py ingest --recording RECORDING_ID --sample-seconds 15 --max-mib 8
-python3 ingest_media.py report
+python3 -m scripts.ingest_media plan
+python3 -m scripts.ingest_media probe --recording RECORDING_ID
+python3 -m scripts.ingest_media ingest --recording RECORDING_ID --sample-seconds 15 --max-mib 8
+python3 -m scripts.ingest_media report
 python3 -m unittest discover
 ```
 

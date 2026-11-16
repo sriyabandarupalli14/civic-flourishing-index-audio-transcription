@@ -11,7 +11,7 @@ from collectors.wordpress_churches import (
 )
 from collectors.registry import CHURCH_BY_KEY
 from collectors.wordpress import WordPressCollection, WordPressSermon
-from sermon_collectors import WORDPRESS_COLLECTORS, collect_church
+from collectors.dispatch import WORDPRESS_COLLECTORS, collect_church
 
 
 class WordPressTests(unittest.TestCase):
