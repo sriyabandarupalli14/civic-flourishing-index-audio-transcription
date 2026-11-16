@@ -51,6 +51,12 @@ def main():
     stats = {label: diagnostics(runs) for label, runs in outputs.items()}
     # The V4 control and treatment must share the selected segments and candidate gate.
     for key in held:
+        for label in ("V4-A", "V4-B"):
+            predicted = outputs[label][key]
+            baseline_text = {event["segment"]: event["original"] for event in predicted["adaptation"]["events"]}
+            restored = [baseline_text.get(row["id"], row["text"]) for row in predicted["segments"]]
+            if restored != [row["text"] for row in outputs["V0"][key]["segments"]]:
+                raise ValueError(f"{label} first pass differs from V0")
         control, treatment = (outputs[label][key]["adaptation"]["events"] for label in ("V4-A", "V4-B"))
         def gates(events):
             return [(row["segment"], row["plausible_terms"], row["span_sha256"]) for row in events]
@@ -69,9 +75,11 @@ def main():
     freeze = json.loads((root / "frozen_policy.json").read_text())
     paired = {(row["reference"], row["condition"]): row for row in comparison["summaries"]}
     faster = 1 - stats["V4-B"]["median_seconds"] / stats["medium"]["median_seconds"]
-    improved = all(paired[ref, "V4-B"]["term_f1"] is not None
-                   and paired[ref, "V4-B"]["term_f1"] > paired[ref, control]["term_f1"]
-                   and paired[ref, "V4-B"]["wer"] <= paired[ref, control]["wer"]
+    def improves(treatment, control):
+        return (all(row[key] is not None for row in (treatment, control) for key in ("term_f1", "wer"))
+                and treatment["term_f1"] > control["term_f1"] and treatment["wer"] <= control["wer"])
+
+    improved = all(improves(paired[ref, "V4-B"], paired[ref, control])
                    for ref in REFERENCES for control in ("V0", "V4-A"))
     errors = []
     for key in held:
@@ -94,6 +102,13 @@ def main():
     for subset, group in refs.items():
         for name, row in group.items():
             lines.append(f"| {subset} | {name} | {row['occurrences']} | {row['distinct_terms']} | {row['clips_with_terms']} |")
+    lines += ["", "## Development selection", "",
+              "| Policy | Prompted development retries | large-v3 WER / F1 | wav2vec2 WER / F1 |",
+              "| --- | ---: | --- | --- |"]
+    for name, modes in freeze["development_scores"].items():
+        values = " | ".join(f"{percent(modes['V4-B'][ref]['wer'])} / {percent(modes['V4-B'][ref]['term_f1'])}"
+                            for ref in REFERENCES)
+        lines.append(f"| {name} | {freeze['development_prompted_retries'][name]} | {values} |")
     lines += ["", "## Held-out agreement", "",
               "| Reference | Condition | WER | CER | Term precision | Term recall | Term F1 | Unmatched terms |",
               "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
@@ -113,6 +128,10 @@ def main():
         lines.append(f"| {label} | {row['median_seconds']:.2f} | {row['median_peak_rss_mib']:.1f} "
                      f"| {row['repeat_clips']} | {row['retries']}/{row['segments']} ({percent(row['retry_rate'])}) "
                      f"| {row['accepted']}/{row['retries']} ({percent(row['acceptance_rate'])}) |")
+    lines += ["", "### Retry decisions", ""]
+    for label in ("V4-A", "V4-B"):
+        outcomes = ", ".join(f"{key} ({count})" for key, count in sorted(stats[label]["outcomes"].items()))
+        lines.append(f"- {label} recorded {outcomes or 'zero retries'}.")
     lines += ["", f"V4-B used {percent(faster)} less median time than medium.en. "
               f"The joint improvement check against V0 and V4-A {'passed' if improved else 'did not pass'}.", "",
               f"V4-B supplied hints on {stats['V4-B']['prompted_retries']} of {stats['V4-B']['retries']} held-out retries.",

@@ -43,8 +43,12 @@ obvious repeated surplus. An accepted segment stores the original and alternate
 text in the event ledger and omits stale word-level timings. Raw decoder
 confidence never decides acceptance by itself.
 
-Compare the two predefined policies on the ten development recordings using
-mean V4-B term F1 across references, then mean WER and the lower token cap.
+Compare three policies on the ten development recordings. The exploratory
+confidence cutoff was added during development after the early conservative
+trial yielded no eligible spans. Among policies that actually applied hints
+in development, rank by mean V4-B term F1 across references, then mean WER
+and the lower token cap. If every policy abstains, apply the same ordering
+to all three and report the absent treatment exposure.
 The frozen policy applies to both arms on held-out clips. The reported success
 check requires V4-B to improve term F1 against V0 and V4-A on both references
 without increasing WER. The efficiency target is at least 20% lower median
@@ -63,7 +67,7 @@ Use a fresh ignored output directory for sample acquisition.
 python3 -m scripts.prepare_v4 --acquire --output outputs/evaluation_v4
 python3 -m scripts.run_asr_batch --engine wav2vec2 --model-dir models/wav2vec2/22aad52d435eb6dbaf354bdad9b0da84ce7d6156 --manifest outputs/evaluation_v4/clip_manifest.json --output outputs/evaluation_v4/runs/wav2vec2
 python3 -m scripts.run_asr_batch --model large-v3 --prompt none --model-dir models/large-v3/edaa852ec7e145841d8ffdb056a99866b5f0a478 --manifest outputs/evaluation_v4/clip_manifest.json --output outputs/evaluation_v4/runs/large-v3
-for policy in conservative moderate; do
+for policy in conservative moderate exploratory; do
   for mode in V4-A V4-B; do
     python3 -m scripts.run_v4_condition "$mode" --data outputs/evaluation_v4 --subset development --policy "$policy" --label "$mode-$policy"
   done

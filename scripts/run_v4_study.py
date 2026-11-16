@@ -21,9 +21,11 @@ def main():
     policies = json.loads(Path("configs/v4_policies.json").read_text())
     path = data / "frozen_policy.json"
     if not path.exists():
-        name, scores = policy_scores(data, policies, read_lexicon(Path("configs/religious_lexicon.tsv")))
+        name, scores, exposure = policy_scores(data, policies, read_lexicon(Path("configs/religious_lexicon.tsv")))
         atomic_json(path, {"plan_sha256": manifest["plan_sha256"], "name": name, "policy": policies[name],
-                           "selection": "highest mean term F1, then lowest mean WER, then smallest token budget",
+                           "selection": "among policies with any prompted development retry if available, highest mean "
+                                        "term F1, then lowest mean WER, then smallest token budget",
+                           "development_prompted_retries": exposure,
                            "development_scores": scores})
         print("Frozen policy:", name, flush=True)
     env = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "OMP_NUM_THREADS": "4"}

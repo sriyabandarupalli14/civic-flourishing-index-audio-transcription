@@ -1,4 +1,35 @@
 {
-  "conservative": {"logprob": -0.8, "compression": 2.4, "silence": 0.6, "relevance": 0.76, "term_limit": 2, "hotword_budget": 8, "text_similarity": 0.78, "max_span_seconds": 30, "max_retries": 1},
-  "moderate": {"logprob": -0.55, "compression": 2.4, "silence": 0.6, "relevance": 0.66, "term_limit": 5, "hotword_budget": 16, "text_similarity": 0.70, "max_span_seconds": 30, "max_retries": 1}
+  "conservative": {
+    "logprob": -0.8,
+    "compression": 2.4,
+    "silence": 0.6,
+    "relevance": 0.76,
+    "term_limit": 2,
+    "hotword_budget": 8,
+    "text_similarity": 0.78,
+    "max_span_seconds": 30,
+    "max_retries": 1
+  },
+  "moderate": {
+    "logprob": -0.55,
+    "compression": 2.4,
+    "silence": 0.6,
+    "relevance": 0.66,
+    "term_limit": 5,
+    "hotword_budget": 16,
+    "text_similarity": 0.7,
+    "max_span_seconds": 30,
+    "max_retries": 1
+  },
+  "exploratory": {
+    "logprob": -0.28,
+    "compression": 2.4,
+    "silence": 0.6,
+    "relevance": 0.64,
+    "term_limit": 3,
+    "hotword_budget": 12,
+    "text_similarity": 0.7,
+    "max_span_seconds": 30,
+    "max_retries": 1
+  }
 }

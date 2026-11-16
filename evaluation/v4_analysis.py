@@ -25,13 +25,15 @@ def policy_scores(data, policies, lexicon):
     refs = {name: checkpoint_set(data / "runs" / name, clips) for name in ("large-v3", "wav2vec2")}
     if any(set(rows) != set(clips) for rows in refs.values()):
         raise ValueError("Development pseudo-references are incomplete")
-    scores = {}
+    scores, exposure = {}, {}
     for name, policy in policies.items():
         result = {}
         for mode in ("V4-A", "V4-B"):
             rows = checkpoint_set(data / "runs/development" / f"{mode}-{name}", clips)
             if set(rows) != set(clips):
                 raise ValueError(f"Development predictions incomplete for {mode} {name}")
+            if mode == "V4-B":
+                exposure[name] = diagnostics(rows)["prompted_retries"]
             result[mode] = {ref: pool(compare(clips, rows, text, index)) for ref, text in refs.items()}
         scores[name] = result
 
@@ -41,7 +43,8 @@ def policy_scores(data, policies, lexicon):
         wer = statistics.mean(row["wer"] if row["wer"] is not None else 1 for row in values)
         return -f1, wer, policies[name]["hotword_budget"], name
 
-    return min(policies, key=rank), scores
+    exposed = [name for name in policies if exposure[name]]
+    return min(exposed or policies.keys(), key=rank), scores, exposure
 
 
 def diagnostics(predictions):
