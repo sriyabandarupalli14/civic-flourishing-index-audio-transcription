@@ -9,7 +9,7 @@ from media_ingestion.pipeline import atomic_json, hash_file
 from transcription.batch import run_batch
 from transcription.config import read_config
 from transcription.inference import WhisperInference
-from vocabulary.retrieval import balanced_static, read_lexicon
+from vocabulary.retrieval import balanced_static, rankings_fingerprint, read_lexicon
 
 
 def main(argv=None):
@@ -67,8 +67,11 @@ def main(argv=None):
                     data = json.loads(args.rankings.read_text(encoding="utf-8"))
                     if data["plan_sha256"] != manifest["plan_sha256"] or data["lexicon_sha256"] != hash_file(args.lexicon):
                         parser.error("Rankings belong to a different evaluation sample or lexicon")
+                    ranking_sha = rankings_fingerprint(data)
+                    if data["rankings_sha256"] != ranking_sha:
+                        parser.error("Metadata ranking artifact failed integrity verification")
                     ranks = data["rankings"]
-                    config["prompt"].update(rankings_sha256=hash_file(args.rankings), retrieval=args.retrieval_method)
+                    config["prompt"].update(rankings_sha256=ranking_sha, retrieval=args.retrieval_method)
 
                     def selector(metadata):
                         return ranks[metadata["clip_id"]][args.retrieval_method][:args.top_k]

@@ -11,7 +11,7 @@ from subprocess import TimeoutExpired, run
 from evaluation.metrics import index_terms
 from evaluation.results import compare, load_predictions, pool
 from media_ingestion.pipeline import atomic_json, hash_file
-from vocabulary.retrieval import read_lexicon
+from vocabulary.retrieval import rankings_fingerprint, read_lexicon
 
 MODELS = ("base.en", "small.en", "medium.en")
 REFERENCES = ("wav2vec2", "large-v3")
@@ -37,7 +37,7 @@ def choose_development(manifest, root, lexicon_path):
 
     def complete(row):
         return active and all((result := row["scores"][ref])["clips"] == len(expected)
-                              and result["term_f1"] is not None for ref in active)
+                              and result["term_f1"] is not None and result["wer"] is not None for ref in active)
 
     def performance(row):
         f1 = sum(row["scores"][ref]["term_f1"] for ref in active) / len(active)
@@ -127,11 +127,15 @@ def main(argv=None):
         controls = ("--rankings", args.rankings, "--retrieval-method", method) if dynamic else ()
         asr("base.en", f"dev-{method}-{top_k}", "--subset", "development", "--top-k", top_k,
             "--prompt", "dynamic" if dynamic else method, *controls)
+    if time.monotonic() >= deadline:
+        record("freeze", "budget_exhausted")
+        return
     freeze_path = args.output / "frozen_prompt.json"
     computed = choose_development(manifest, args.output, args.lexicon)
+    computed["rankings_sha256"] = rankings_fingerprint(json.loads(args.rankings.read_text(encoding="utf-8")))
     if freeze_path.exists():
         selected = json.loads(freeze_path.read_text(encoding="utf-8"))
-        if any(selected[key] != computed[key] for key in ("plan_sha256", "lexicon_sha256")):
+        if any(selected[key] != computed[key] for key in ("plan_sha256", "lexicon_sha256", "rankings_sha256")):
             raise ValueError("Frozen tuning settings belong to a different dataset or lexicon")
     else:
         selected = computed
@@ -150,6 +154,7 @@ def main(argv=None):
           pairs=tuple((f"{model}-{strategy}", larger) for model, larger in
                       (("base.en", "small.en"), ("base.en", "medium.en"), ("small.en", "medium.en"))
                       for strategy in ("static", "expanded", "dynamic")))
+    execute("scripts.render_ml_report", ("--manifest", args.manifest, "--runs", args.output), "report")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """Plan a seeded, church-balanced sample and materialize exact local clips."""
 
 import json
+import re
 import wave
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -128,6 +129,16 @@ def verify_plan(plan):
     body = {key: value for key, value in plan.items() if key != "plan_sha256"}
     if fingerprint(body) != plan["plan_sha256"]:
         raise ValueError("Plan checksum mismatch")
+    ids = set()
+    for clip in plan["clips"]:
+        recording = clip["recording_id"]
+        start, duration = clip["start_seconds"], clip["duration_seconds"]
+        if (not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", recording)
+                or type(start) is not int or type(duration) is not int or start < 0 or duration < 1
+                or recording in ids or clip["clip_id"] != f"{recording}-{start}s-{duration}s"
+                or clip["subset"] not in {"development", "held_out"}):
+            raise ValueError("Invalid or repeated planned clip")
+        ids.add(recording)
 
 
 def materialize(plan, sources, output):

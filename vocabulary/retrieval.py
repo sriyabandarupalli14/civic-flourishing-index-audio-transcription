@@ -103,3 +103,12 @@ def balanced_static(lexicon):
         categories.setdefault(row["category"], []).append(row["term"])
     return [terms[index] for index in range(max(map(len, categories.values())))
             for terms in categories.values() if index < len(terms)]
+
+
+def rankings_fingerprint(artifact):
+    from transcription.checkpoints import digest
+
+    rankings = {key: {method: row[method] for method in ("exact", "lexical", "semantic", "hybrid")}
+                for key, row in artifact["rankings"].items()}
+    return digest({"plan_sha256": artifact["plan_sha256"], "lexicon_sha256": artifact["lexicon_sha256"],
+                   "embedding": artifact["embedding"], "rankings": rankings})

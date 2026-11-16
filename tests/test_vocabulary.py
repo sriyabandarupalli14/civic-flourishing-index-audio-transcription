@@ -20,3 +20,15 @@ class VocabularyTests(unittest.TestCase):
         self.assertEqual(value, "Holy Spirit, Passover")
         self.assertEqual(details["hotword_tokens"], 3)
         self.assertTrue(details["truncated"])
+
+    def test_ranking_fingerprint_ignores_nondeterministic_timing(self):
+        from vocabulary.retrieval import rankings_fingerprint
+
+        row = {method: ["Passover"] for method in ("exact", "lexical", "semantic", "hybrid")}
+        artifact = {"plan_sha256": "plan", "lexicon_sha256": "lexicon",
+                    "embedding": {"revision": "sha"}, "rankings": {"rec": row}}
+        first = rankings_fingerprint(artifact)
+        row["retrieval_seconds"] = {"lexical": 5}
+        self.assertEqual(rankings_fingerprint(artifact), first)
+        row["lexical"] = ["Pentecost"]
+        self.assertNotEqual(rankings_fingerprint(artifact), first)

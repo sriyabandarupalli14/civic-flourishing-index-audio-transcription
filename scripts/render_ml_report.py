@@ -66,7 +66,7 @@ def recommend(benchmark, adaptation):
         return (f"The provisional production choice is **{selected}**. It meets the prespecified domain F1, "
                 f"WER and runtime thresholds relative to {best} on both references.")
     return (f"The lowest mean reference-relative WER among complete unprompted conditions is **{best}**. "
-            "Treat it as a provisional accuracy-oriented configuration. An efficiency-sensitive choice depends "
+            "Treat it as a provisional agreement-oriented configuration. An efficiency-sensitive choice depends "
             "on acceptable disagreement and latency. The available adaptation comparisons do not justify "
             "choosing a smaller prompted model under the prespecified criteria against this baseline.")
 

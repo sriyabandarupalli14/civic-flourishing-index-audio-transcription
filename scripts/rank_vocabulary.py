@@ -6,7 +6,7 @@ from pathlib import Path
 from time import perf_counter
 
 from media_ingestion.pipeline import atomic_json, hash_file
-from vocabulary.retrieval import MiniLM, Retrieval, read_lexicon
+from vocabulary.retrieval import MiniLM, Retrieval, rankings_fingerprint, read_lexicon
 
 
 def main():
@@ -19,21 +19,26 @@ def main():
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     fallback = json.loads(args.baseline_vocabulary.read_text(encoding="utf-8"))["hotwords"]
+    initialization_start = perf_counter()
     encoder = MiniLM(args.embedding_model)
     retriever = Retrieval(read_lexicon(args.lexicon), encoder)
+    index_seconds = perf_counter() - initialization_start
     ranks = {}
     for clip in manifest["clips"]:
         if clip["status"] != "ready":
             continue
-        start = perf_counter()
-        ranks[clip["clip_id"]] = {
-            method: retriever.rank(clip["source_record"], method=method, top_k=40, fallback=fallback)
-            for method in ("exact", "lexical", "semantic", "hybrid")
-        }
-        ranks[clip["clip_id"]]["combined_retrieval_seconds"] = perf_counter() - start
+        per_method, timings = {}, {}
+        for method in ("exact", "lexical", "semantic", "hybrid"):
+            start = perf_counter()
+            per_method[method] = retriever.rank(clip["source_record"], method=method,
+                                                top_k=40, fallback=fallback)
+            timings[method] = perf_counter() - start
+        ranks[clip["clip_id"]] = {**per_method, "retrieval_seconds": timings}
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    atomic_json(args.output, {"plan_sha256": manifest["plan_sha256"], "lexicon_sha256": hash_file(args.lexicon),
-                              "embedding": encoder.provenance, "rankings": ranks})
+    result = {"plan_sha256": manifest["plan_sha256"], "lexicon_sha256": hash_file(args.lexicon),
+              "embedding": encoder.provenance, "index_initialization_seconds": index_seconds, "rankings": ranks}
+    result["rankings_sha256"] = rankings_fingerprint(result)
+    atomic_json(args.output, result)
     print(f"Ranked vocabulary for {len(ranks)} verified clips")
 
 
