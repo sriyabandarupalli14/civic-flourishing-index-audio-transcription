@@ -13,6 +13,7 @@ def run_batch(entries, model_factory, output, *, shard_count=1, shard_index=0):
         raise ValueError("Invalid shard index or count")
     output.mkdir(parents=True, exist_ok=True)
     model = None
+    initialization_error = None
     for row in entries:
         record_id = row["clip_id"] if "clip_id" in row else row["recording_id"]
         if int(digest(record_id), 16) % shard_count != shard_index:
@@ -22,8 +23,15 @@ def run_batch(entries, model_factory, output, *, shard_count=1, shard_index=0):
             sha256 = row["audio_sha256"]
             if hash_file(path) != sha256:
                 raise ValueError("audio_checksum_mismatch")
-            if model is None:
-                model = model_factory()
+            if model is None and initialization_error is None:
+                try:
+                    model = model_factory()
+                except (OSError, ValueError, RuntimeError) as error:
+                    initialization_error = type(error).__name__
+            if initialization_error:
+                yield {"record_id": record_id, "status": "failed", "error_type": initialization_error,
+                       "reason": "model_initialization_failed"}
+                continue
             identity = {"record_id": record_id, "audio_sha256": sha256,
                         "configuration_sha256": model.configuration_sha256,
                         "metadata_sha256": digest({key: value for key, value in row.items() if key != "audio_file"})}

@@ -20,3 +20,21 @@ class ReferenceMetricTests(unittest.TestCase):
         self.assertEqual(result["word_errors"], 1)
         self.assertEqual(result["character_errors"], 10)
         self.assertEqual(result["false_term_insertions"], 1)
+
+    def test_comparable_unprompted_model_remains_preferred_without_prompt_gain(self):
+        from scripts.render_ml_report import recommend
+
+        refs = ("independent", "whisper")
+        benchmark = {"reference_predictions": dict.fromkeys(refs, 39), "summaries": [
+            {"condition": name, "reference": ref, "wer": wer, "missing_pairs": 0, "term_f1": .8,
+             "median_inference_seconds": runtime}
+            for ref in refs for name, wer, runtime in (("medium.en", .08, 20), ("small.en", .09, 8))
+        ]}
+        adaptation = {"summaries": [*benchmark["summaries"], *(
+            {"condition": "small.en-dynamic", "reference": ref, "term_f1": .8,
+             "median_inference_seconds": 7} for ref in refs
+        )], "paired_comparisons": [
+            {"first": name, "second": "medium.en", "reference": ref, "meets_comparability_thresholds": True}
+            for name in ("small.en", "small.en-dynamic") for ref in refs
+        ]}
+        self.assertIn("**small.en**", recommend(benchmark, adaptation))

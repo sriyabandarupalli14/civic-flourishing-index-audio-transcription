@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import requests
 
 from media_ingestion.pipeline import Limits, MediaPipeline, hash_file, load_manifest, task_key
+from media_ingestion.transport import MediaError
 
 from .dataset import verify_plan
 
@@ -26,11 +27,15 @@ def acquire_prefixes(plan, manifest, output, existing):
         extent = clip["start_seconds"] + clip["duration_seconds"]
         limits = Limits(max_bytes=4 * 1024**2, max_seconds=extent, sample_seconds=extent,
                         attempts=1, max_references=1)
-        with requests.Session() as session:
-            session.max_redirects = 5
-            result = MediaPipeline(session, output, refresh=lambda *_: None).run(
-                item, mode="ingest", kind="audio", limits=limits,
-            )
+        try:
+            with requests.Session() as session:
+                session.max_redirects = 5
+                result = MediaPipeline(session, output, refresh=lambda *_: None).run(
+                    item, mode="ingest", kind="audio", limits=limits,
+                )
+        except (OSError, MediaError) as error:
+            code = error.code if isinstance(error, MediaError) else "local_io_error"
+            result = {"status": "failed", "reason": code}
         source = None
         if result["status"] in {"decoded_audio", "reused"}:
             key = task_key(item, "audio", limits)

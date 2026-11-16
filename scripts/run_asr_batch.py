@@ -71,6 +71,8 @@ def main(argv=None):
                     if data["rankings_sha256"] != ranking_sha:
                         parser.error("Metadata ranking artifact failed integrity verification")
                     ranks = data["rankings"]
+                    if {row["clip_id"] for row in entries[:args.limit]} - ranks.keys():
+                        parser.error("Missing metadata rankings for a selected clip")
                     config["prompt"].update(rankings_sha256=ranking_sha, retrieval=args.retrieval_method)
 
                     def selector(metadata):

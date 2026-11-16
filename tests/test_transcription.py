@@ -62,3 +62,20 @@ class WhisperInfrastructureTests(unittest.TestCase):
             self.assertEqual(model.calls, 2)
             audio.write_bytes(b"changed audio")
             self.assertEqual(run()["reason"], "audio_checksum_mismatch")
+
+    def test_batch_does_not_repeatedly_retry_model_initialization(self):
+        from unittest.mock import Mock
+
+        from media_ingestion.pipeline import hash_file
+        from transcription.batch import run_batch
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audio = root / "audio.wav"
+            audio.write_bytes(b"audio fixture")
+            entries = [{"recording_id": f"fixture-{i}", "audio_file": str(audio),
+                        "audio_sha256": hash_file(audio)} for i in range(3)]
+            factory = Mock(side_effect=RuntimeError())
+            events = list(run_batch(entries, factory, root))
+            factory.assert_called_once_with()
+            self.assertEqual([row["reason"] for row in events], ["model_initialization_failed"] * 3)

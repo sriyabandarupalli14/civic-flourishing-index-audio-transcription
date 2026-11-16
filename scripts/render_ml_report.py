@@ -22,7 +22,7 @@ def add_section(lines, path, label):
     lines.extend([
         f"Subset: {comparison['subset']}. Ready clips: {comparison['ready_clips']}. Metrics are relative to each named automated reference.",
         "",
-        "| Reference | Condition | Paired / ready | WER | CER | Term P / R / F1 | S / D / I | False term insertions | Median s | RTF | Peak RSS MiB | Load s |",
+        "| Reference | Condition | Paired / ready | WER | CER | Term P / R / F1 | S / D / I | False term insertions | Median s | RTF | Median peak RSS MiB | Load s |",
         "| --- | --- | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ])
     for row in comparison["summaries"]:
@@ -53,28 +53,40 @@ def recommend(benchmark, adaptation):
     if not complete:
         return "Evidence is incomplete. Keep the smoke-tested base.en unprompted configuration provisional."
     best = min(complete, key=lambda model: sum(row["wer"] for row in complete[model].values()) / len(refs))
-    supports = {}
-    if adaptation:
-        for row in adaptation["paired_comparisons"]:
-            if row["second"] == best and row["meets_comparability_thresholds"] is True:
-                supports.setdefault(row["first"], set()).add(row["reference"])
-    eligible = {model for model, supporting in supports.items() if refs == supporting and len(refs) == 2}
-    if eligible:
-        medians = {row["condition"]: row["median_inference_seconds"] for row in adaptation["summaries"]
-                   if row["condition"] in eligible}
-        selected = min(eligible, key=lambda candidate: (medians[candidate], candidate))
-        return (f"The provisional production choice is **{selected}**. It meets the prespecified domain F1, "
-                f"WER and runtime thresholds relative to {best} on both references.")
-    return (f"The lowest mean reference-relative WER among complete unprompted conditions is **{best}**. "
-            "Treat it as a provisional agreement-oriented configuration. An efficiency-sensitive choice depends "
-            "on acceptable disagreement and latency. The available adaptation comparisons do not justify "
-            "choosing a smaller prompted model under the prespecified criteria against this baseline.")
+    if not adaptation or len(refs) != 2:
+        return (f"**{best} unprompted** has the lowest mean reference-relative WER among complete baselines. "
+                "The adaptation evidence is incomplete, so the production setting remains provisional.")
+    supporting = {}
+    for row in adaptation["paired_comparisons"]:
+        if row["second"] == best and row["meets_comparability_thresholds"] is True:
+            supporting.setdefault(row["first"], set()).add(row["reference"])
+    eligible = {label for label, evidence in supporting.items() if evidence == refs}
+    by_label = {(row["condition"], row["reference"]): row for row in adaptation["summaries"]}
+    candidates = []
+    for label in sorted(eligible):
+        baseline = label.split("-", 1)[0]
+        if baseline in eligible and label != baseline:
+            gains = [by_label[label, ref]["term_f1"] - by_label[baseline, ref]["term_f1"] for ref in refs]
+            if min(gains) < 0 or not any(gain > 0 for gain in gains):
+                continue
+        runtime = by_label[label, sorted(refs)[0]]["median_inference_seconds"]
+        candidates.append((runtime, label))
+    if candidates:
+        selected = min(candidates)[1]
+        return (f"The provisional configuration is **{selected}**. It meets the prespecified domain F1, WER and "
+                f"runtime thresholds against {best} on both references. Where an unprompted configuration already "
+                "qualifies, a prompted configuration is preferred only when it improves term F1 on at least one "
+                "reference without lowering it on the other. Comparability alone does not establish prompt benefit.")
+    return (f"**{best} unprompted** has the lowest mean reference-relative WER among complete baselines. "
+            "No smaller tested setting met the prespecified criteria against it on both references.")
+
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=Path("outputs/evaluation/clip_manifest.json"))
     parser.add_argument("--runs", type=Path, default=Path("outputs/evaluation/runs"))
+    parser.add_argument("--rankings", type=Path, default=Path("outputs/evaluation/vocabulary_rankings.json"))
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     coverage = manifest["coverage"]
@@ -95,12 +107,23 @@ def main():
         "and precomputed retrieval, which have separate timing artifacts. Memory is sampled CPU process RSS.", "",
     ]
     benchmark = add_section(lines, args.runs / "benchmark/comparison.json", "Benchmark")
-    development = add_section(lines, args.runs / "development/comparison.json", "Development")
+    add_section(lines, args.runs / "development/comparison.json", "Development")
     freeze = args.runs / "frozen_prompt.json"
     if freeze.is_file():
         selected = json.loads(freeze.read_text(encoding="utf-8"))
         lines.extend([f"Frozen dynamic route: **{selected['retrieval_method']}**, K={selected['top_k']}, "
                       f"{selected['hotword_budget']} token cap. Selection used development clips.", ""])
+        if args.rankings.is_file():
+            artifact = json.loads(args.rankings.read_text(encoding="utf-8"))
+            if artifact.get("rankings_sha256") == selected.get("rankings_sha256"):
+                lines.extend(["### Retrieval examples", ""])
+                method = selected["retrieval_method"]
+                examples = [clip for clip in manifest["clips"] if clip["status"] == "ready"
+                            and clip["subset"] == "development" and clip["source_record"].get("title")][:2]
+                for clip in examples:
+                    terms = artifact["rankings"][clip["clip_id"]][method][:5]
+                    lines.append(f"- {clip['source_record']['title']} → {', '.join(terms)}")
+                lines.append("")
     adaptation = add_section(lines, args.runs / "adaptation/comparison.json", "Adaptation")
     lines.extend(["## Reference disagreement and decision", ""])
     if benchmark:
@@ -109,7 +132,19 @@ def main():
                          f"WER {percentage(row['wer'])}, CER {percentage(row['cer'])}, "
                          f"domain F1 {percentage(row['term_f1'])}.")
         lines.append("")
-    lines.extend([recommend(benchmark, adaptation), "", "## Limitations", "",
+    lines.extend([recommend(benchmark, adaptation), ""])
+    if adaptation:
+        lines.extend(["## Prompt effects relative to each model's baseline", "",
+                      "| Reference | Prompted condition | Paired WER change (pp) | Term F1 change (pp) |",
+                      "| --- | --- | ---: | ---: |"])
+        for row in adaptation["paired_comparisons"]:
+            if (not row["first"].startswith(row["second"] + "-")
+                    or row.get("paired_delta_wer") is None or row.get("paired_delta_term_f1") is None):
+                continue
+            lines.append(f"| {row['reference']} | {row['first']} | {100 * row['paired_delta_wer']:+.2f}"
+                         f" | {100 * row['paired_delta_term_f1']:+.2f} |")
+        lines.append("")
+    lines.extend(["## Limitations", "",
                   "Automated references can share errors and can differ on silence, singing, names, contractions, "
                   "numbers and word boundaries. These results measure agreement only. Domain counts match literal "
                   "lexicon terms and can include common words used outside religious contexts. The purposive sample "

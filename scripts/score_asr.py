@@ -111,6 +111,12 @@ def main(argv=None):
                             and pa["median_inference_seconds"] <= 0.8 * pb["median_inference_seconds"])
             pairs.append({"reference": reference, "first": left, "second": right,
                           "matched_clips": len({row["clip_id"] for row in a} & {row["clip_id"] for row in b}),
+                          "paired_delta_wer": pa["wer"] - pb["wer"] if complete and pa["wer"] is not None
+                          and pb["wer"] is not None else None,
+                          "paired_delta_term_f1": pa["term_f1"] - pb["term_f1"] if complete
+                          and pa["term_f1"] is not None and pb["term_f1"] is not None else None,
+                          "runtime_ratio": pa["median_inference_seconds"] / pb["median_inference_seconds"]
+                          if complete and pb["median_inference_seconds"] else None,
                           "intervals_first_minus_second": paired_intervals(a, b),
                           "meets_comparability_thresholds": criteria})
     args.output.mkdir(parents=True, exist_ok=True)

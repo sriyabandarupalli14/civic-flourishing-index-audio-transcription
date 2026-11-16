@@ -150,11 +150,13 @@ def main(argv=None):
                         "--top-k", selected["top_k"]) if strategy == "dynamic" else ()
             asr(model, label, "--subset", "held_out", "--prompt", strategy, *controls)
             conditions.append(label)
-    score("adaptation", conditions,
-          pairs=tuple((f"{model}-{strategy}", larger) for model, larger in
-                      (("base.en", "small.en"), ("base.en", "medium.en"), ("small.en", "medium.en"))
-                      for strategy in ("static", "expanded", "dynamic")))
-    execute("scripts.render_ml_report", ("--manifest", args.manifest, "--runs", args.output), "report")
+    couples = (("base.en", "small.en"), ("base.en", "medium.en"), ("small.en", "medium.en"))
+    pairs = tuple((model if strategy == "none" else f"{model}-{strategy}", larger)
+                  for model, larger in couples for strategy in ("none", "static", "expanded", "dynamic"))
+    pairs += tuple((f"{model}-{variant}", model) for model in MODELS
+                   for variant in ("static", "expanded", "dynamic"))
+    score("adaptation", conditions, pairs=pairs)
+    execute("scripts.render_ml_report", ("--manifest", args.manifest, "--runs", args.output, "--rankings", args.rankings), "report")
 
 
 if __name__ == "__main__":
