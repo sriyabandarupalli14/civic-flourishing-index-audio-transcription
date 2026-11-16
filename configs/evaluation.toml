@@ -1,0 +1,7 @@
+[dataset]
+seed = 20261116
+churches = 10
+clips_per_church = 5
+development_per_church = 1
+start_seconds = 30
+duration_seconds = 60
