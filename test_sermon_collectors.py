@@ -87,9 +87,9 @@ class CollectorTests(unittest.TestCase):
 
 
     def test_registry_scope_and_dispatch(self):
-        self.assertEqual([church.number for church in CHURCHES], list(range(1, 21)))
-        self.assertEqual(len({church.place_id for church in CHURCHES}), 20)
-        self.assertEqual(len(CHURCH_BY_KEY), 20)
+        self.assertEqual([church.number for church in CHURCHES], list(range(1, 45)))
+        self.assertEqual(len({church.place_id for church in CHURCHES}), 44)
+        self.assertEqual(len(CHURCH_BY_KEY), 44)
         self.assertEqual([c.number for c in CHURCHES if c.status == "active"], [n for n in range(1, 21) if n not in (8, 18)])
         self.assertEqual([c.number for c in CHURCHES if c.status == "excluded"], [8, 18])
         self.assertEqual(sum(c.status == "pending_migration" for c in CHURCHES), 0)

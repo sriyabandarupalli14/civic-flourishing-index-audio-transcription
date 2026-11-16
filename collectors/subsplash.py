@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 from .records import format_collection
 
-def collect_amazing_grace(archive_url, place_id, church_name, *, session, website_id="42076", app_id="CRCXMM"):
+def collect_amazing_grace(archive_url, place_id, church_name, *, session, website_id="42076", app_id="CRCXMM", pause=time.sleep):
     origin = urlsplit(archive_url)
     base = f"{origin.scheme}://{origin.netloc}"
 
@@ -17,7 +17,7 @@ def collect_amazing_grace(archive_url, place_id, church_name, *, session, websit
     expected_total = None
 
     while True:
-        time.sleep(0.4)
+        pause(0.4)
 
         response = session.post(
             f"{base}/controllers/subsplash",
@@ -77,7 +77,7 @@ def collect_amazing_grace(archive_url, place_id, church_name, *, session, websit
     for number, (media_id, item) in enumerate(
         items_by_id.items(), start=1
     ):
-        time.sleep(0.4)
+        pause(0.4)
 
         response = session.get(
             f"https://feeds.subsplash.com/api/v1/media-detail/{media_id}",
