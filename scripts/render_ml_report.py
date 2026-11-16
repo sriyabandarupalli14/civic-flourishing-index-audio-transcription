@@ -144,6 +144,19 @@ def main():
             lines.append(f"| {row['reference']} | {row['first']} | {100 * row['paired_delta_wer']:+.2f}"
                          f" | {100 * row['paired_delta_term_f1']:+.2f} |")
         lines.append("")
+    error_path = args.runs / "term_errors.json"
+    if error_path.is_file():
+        errors = json.loads(error_path.read_text(encoding="utf-8"))
+        lines.extend(["## Error analysis", "",
+                      "| Reference | Condition | Paired clips | Unmatched term occurrences | Also in the prompt | Prompt-opening matches |",
+                      "| --- | --- | ---: | ---: | ---: | ---: |"])
+        for row in errors["conditions"]:
+            lines.append(f"| {row['reference']} | {row['condition']} | {row['paired_clips']}"
+                         f" | {row['unmatched_hypothesis_terms']} | {row['unmatched_terms_also_in_prompt']}"
+                         f" | {row['literal_prompt_opening_in_hypothesis_clips']} |")
+        lines.extend(["", "Unmatched counts are relative to the named reference. Membership in the prompt "
+                      "and literal output sequences are diagnostic signals requiring caution. The "
+                      "[term audit](term_errors.json) contains the most frequent unmatched terms.", ""])
     lines.extend(["## Limitations", "",
                   "Automated references can share errors and can differ on silence, singing, names, contractions, "
                   "numbers and word boundaries. These results measure agreement only. Domain counts match literal "

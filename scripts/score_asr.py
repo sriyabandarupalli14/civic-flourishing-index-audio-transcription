@@ -22,42 +22,68 @@ def plot(groups, output):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    axes_settings = [
-        ("wer", "Reference-relative WER (%)", 100),
-        ("term_f1", "Reference-relative domain-term F1 (%)", 100),
-        ("median_inference_seconds", "Median inference time (s)", 1),
-        ("median_peak_rss_bytes", "Median sampled peak RSS (MiB)", 1 / 2**20),
-    ]
     references = sorted({row["reference"] for row in groups})
-    figure, axes = plt.subplots(len(references), 4, figsize=(15, 4 * len(references)), squeeze=False,
-                                layout="constrained")
+    palette = {"base.en": "#287678", "small.en": "#425c9b", "medium.en": "#9a541c"}
+
+    def draw(axis, rows, metric, title, factor, width):
+        finite = [row for row in rows if row[metric] is not None]
+        labels = [f"{row['condition']} ({row['clips']})" for row in finite]
+        bars = axis.barh(labels, [row[metric] * factor for row in finite],
+                         color=[palette.get(row["condition"].split("-", 1)[0], "#287678") for row in finite])
+        axis.bar_label(bars, fmt="%.2f", padding=3, fontsize=8)
+        axis.set_xlim(0, width)
+        axis.invert_yaxis()
+        axis.set_title(title, fontsize=10)
+        axis.grid(axis="x", alpha=0.18)
+
+    quality = [("wer", "WER (%)"), ("cer", "CER (%)"), ("term_f1", "Domain-term F1 (%)")]
+    row_count = max(sum(row["reference"] == reference for row in groups) for reference in references)
+    height = max(3.0, 1.5 + row_count * 0.24)
+    figure, axes = plt.subplots(len(references), 3, figsize=(14, height * len(references)),
+                                squeeze=False, layout="constrained")
     for reference, row_axes in zip(references, axes):
         rows = [row for row in groups if row["reference"] == reference]
-        for axis, (metric, title, factor) in zip(row_axes, axes_settings):
-            finite = [row for row in rows if row[metric] is not None]
-            bars = axis.barh([f"{row['condition']} ({row['clips']})" for row in finite],
-                             [row[metric] * factor for row in finite], color="#267a80")
-            axis.bar_label(bars, fmt="%.2f", padding=3, fontsize=8)
-            axis.margins(x=0.2)
-            axis.invert_yaxis()
-            axis.set_title(f"{reference}\n{title}", fontsize=10)
-            axis.grid(axis="x", alpha=0.2)
-    figure.suptitle("ASR agreement with automated references and inference cost", fontsize=14)
+        for axis, (metric, title) in zip(row_axes, quality):
+            width = max((100 * row[metric] for row in groups if row[metric] is not None), default=1) * 1.23
+            draw(axis, rows, metric, f"{reference} | {title}", 100, max(width, 1))
+    figure.suptitle("Reference-relative ASR agreement across held or development clips", fontsize=14)
     figure.savefig(output / "asr_comparison.png", dpi=160)
     plt.close(figure)
 
-    figure, axis = plt.subplots(figsize=(8, 5), layout="constrained")
-    for reference in references:
+    figures = ("median_inference_seconds", "median_peak_rss_bytes", "median_model_load_seconds")
+    titles = ("Median inference time (s)", "Median sampled peak RSS (MiB)", "Model loading time (s)")
+    factors = (1, 1 / 2**20, 1)
+    # Resource observations are shared across both reference comparisons.
+    resource_rows = {}
+    for row in groups:
+        label = row["condition"]
+        if label not in resource_rows or row["clips"] > resource_rows[label]["clips"]:
+            resource_rows[label] = row
+    figure, axes = plt.subplots(1, 3, figsize=(14, height), layout="constrained")
+    for axis, metric, title, factor in zip(axes, figures, titles, factors):
+        width = max((factor * row[metric] for row in resource_rows.values() if row[metric] is not None), default=1)
+        draw(axis, list(resource_rows.values()), metric, title, factor, max(width * 1.23, 0.1))
+    figure.suptitle("Local CPU resource measurements", fontsize=14)
+    figure.savefig(output / "runtime_memory.png", dpi=160)
+    plt.close(figure)
+
+    figure, axes = plt.subplots(1, len(references), figsize=(6 * len(references), 4.5),
+                                squeeze=False, sharex=True, sharey=True, layout="constrained")
+    markers = {"static": "s", "expanded": "^", "dynamic": "D", "baseline": "o"}
+    for axis, reference in zip(axes[0], references):
         relevant = [row for row in groups if row["reference"] == reference and row["wer"] is not None]
-        axis.scatter([row["median_inference_seconds"] for row in relevant],
-                     [100 * row["wer"] for row in relevant], label=reference, alpha=0.75)
         for row in relevant:
-            axis.annotate(row["condition"], (row["median_inference_seconds"], 100 * row["wer"]),
-                          xytext=(4, 4), textcoords="offset points", fontsize=7)
-    axis.set(xlabel="Median inference time per clip (seconds)", ylabel="Reference-relative WER (%)",
-             title="Agreement versus computational cost")
-    axis.legend()
-    axis.grid(alpha=0.2)
+            parts = row["condition"].split("-", 1)
+            variant = parts[1] if len(parts) == 2 else "baseline"
+            axis.scatter(row["median_inference_seconds"], 100 * row["wer"], label=row["condition"],
+                         marker=markers.get(variant, "o"), color=palette.get(parts[0], "#287678"), alpha=0.8)
+        axis.set(xlabel="Median inference time per clip (seconds)", title=reference)
+        axis.grid(alpha=0.18)
+    axes[0][0].set_ylabel("Reference-relative WER (%)")
+    handles, labels = axes[0][-1].get_legend_handles_labels()
+    if handles:
+        axes[0][-1].legend(handles, labels, fontsize=7, ncol=2 if len(labels) > 7 else 1)
+    figure.suptitle("Reference agreement versus local inference cost")
     figure.savefig(output / "agreement_cost.png", dpi=160)
     plt.close(figure)
 

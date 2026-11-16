@@ -38,3 +38,12 @@ class ReferenceMetricTests(unittest.TestCase):
             for name in ("small.en", "small.en-dynamic") for ref in refs
         ]}
         self.assertIn("**small.en**", recommend(benchmark, adaptation))
+
+    def test_prompt_echo_requires_contiguous_first_three_hints(self):
+        from scripts.audit_prompt_errors import prompt_echo
+
+        output = {"text": "We read Exodus, Passover, Moses.",
+                  "prompt": {"token_usage": {"selected_terms": ["Exodus", "Passover", "Moses"]}}}
+        self.assertTrue(prompt_echo(output))
+        output["text"] = "We read Exodus, then Passover and Moses."
+        self.assertFalse(prompt_echo(output))

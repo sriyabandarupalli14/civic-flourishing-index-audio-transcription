@@ -73,16 +73,23 @@ def index_terms(terms):
     return index
 
 
-def counts(reference, prediction, lexicon):
-    ref, hyp = tokens(reference), tokens(prediction)
-    changes, matches = align(ref, hyp)
+def terminology_alignment(ref, hyp, matches, lexicon):
     reference_terms = occurrences(ref, lexicon)
     predicted_terms = set(occurrences(hyp, lexicon))
-    matched = 0
+    recovered = set()
     for position, term in reference_terms:
         indices = [matches.get(i) for i in range(position, position + len(term))]
         if indices[0] is not None and indices == list(range(indices[0], indices[0] + len(term))):
-            matched += (indices[0], term) in predicted_terms
+            if (indices[0], term) in predicted_terms:
+                recovered.add((indices[0], term))
+    return reference_terms, predicted_terms, recovered
+
+
+def counts(reference, prediction, lexicon):
+    ref, hyp = tokens(reference), tokens(prediction)
+    changes, matches = align(ref, hyp)
+    reference_terms, predicted_terms, recovered = terminology_alignment(ref, hyp, matches, lexicon)
+    matched = len(recovered)
     ref_chars, hyp_chars = " ".join(ref), " ".join(hyp)
     return {"reference_words": len(ref), "reference_chars": len(ref_chars),
             "substitutions": changes["substitutions"], "deletions": changes["deletions"],
