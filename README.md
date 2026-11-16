@@ -91,3 +91,60 @@ Run `python3 process_stage2.py` from the repository root with the Stage 1 consol
 | Automated tests passed | 52 |
 
 Review flags cover unresolved church or campus identities, shared archives and cross-church references, conflicting metadata or platform identifiers, signed URL variants, attachment relevance, and absent or malformed media references. Some input references were player-library scripts and remain recorded separately from media. Flags can overlap. Group counts remain provisional pending review, and no live accessibility or playback check was performed.
+
+## Media Validation and Audio Ingestion
+
+Stage 3 reads the Stage 2 recording manifest. The offline eligibility plan preserves recording IDs, source metadata, alternate URLs, observation lineage, and all original review flags. Eligible groups can enter media validation. Transcription candidates require decoded full audio and a verified checkpoint.
+
+### Eligibility Rules
+
+| Offline disposition | Recording groups |
+| --- | ---: |
+| **Eligible for media validation** | **12,092** |
+| Inactive church archive | 715 |
+| Unresolved church identity | 680 |
+| Content relevance review | 384 |
+| No supported media reference | 238 |
+| Recording ambiguity | 81 |
+| **Held** | **2,098** |
+| **Total** | **14,190** |
+
+The revised rules released 1,360 warning-only groups. These include 593 groups with incidental player-library assets and supported media, 425 Monroeville groups whose titles differ by an `- Audio` suffix under the same Sermon.net recording ID, 277 separate groups sharing a title and date, and 65 Brierfield groups with historical archive availability warnings. The held manifest retains overlapping reasons. The table counts each group by its primary hold. Stage 2's 342 groups without classified media remain in their separate partition.
+
+### Ingestion Methodology
+
+- Direct audio and video references use an HTTP HEAD request and a bounded ranged GET. YouTube and SoundCloud use yt-dlp for metadata-only resolution before checking the media endpoint. HLS checks the playlist and a prefix of its first segment.
+- Ingestion stages a bounded file or a selection of HLS segments. PyAV extracts and decodes the audio to mono 16 kHz PCM WAV. The pipeline records decoded duration, sample rate, channel count, and a file checksum.
+- Retryable failures use bounded retries. The pipeline can try alternate references from the same group and refresh signed URLs through known public BoxCast and Adventist routes. Local JSONL logs record attempts and failure reasons. Verified WAV checkpoints can be reused when the inputs and settings match.
+
+From the repository root, use Python 3.11 or newer with Requests, yt-dlp, Beautiful Soup, and PyAV. The Stage 2 manifest must be available locally. Substitute an eligible ID for `RECORDING_ID` in the two network commands.
+
+```sh
+python3 ingest_media.py plan
+python3 ingest_media.py probe --recording RECORDING_ID
+python3 ingest_media.py ingest --recording RECORDING_ID --sample-seconds 15 --max-mib 8
+python3 ingest_media.py report
+python3 -m unittest discover
+```
+
+Planning and reporting run offline. Probing and ingestion require explicit IDs. The default output directory, `outputs/sermon_collection/stage3/`, is Git-ignored. It contains the eligibility manifests, logs, WAV files, checkpoints, and separate inventories for decoded previews and full-audio transcription candidates.
+
+### Pilot Results
+
+A live pilot on six selected recording groups used a 15-second target and an 8 MiB staging limit per reference attempt. Five previews decoded successfully. The pilot produced zero full-audio transcription candidates.
+
+| Media type | Observed outcome |
+| --- | --- |
+| Direct audio | An MP3 prefix decoded successfully. |
+| Direct video | One MP4 prefix failed to decode after a successful probe. A second MP4 recording yielded a preview. |
+| YouTube | A preview decoded after metadata resolution. Separate probes encountered a transport error, including on retry. |
+| SoundCloud | The player resolved to HLS, the first segment probe succeeded, and a preview decoded. |
+| HLS | A BoxCast reference expired. Refresh recovered a stream for the same broadcast, and a preview decoded. |
+
+All 66 automated tests passed offline. Corpus-wide media validation, audio ingestion, and transcription are pending.
+
+### Known Limitations
+
+- A successful probe establishes partial access. Video containers can require metadata beyond the fetched prefix, and full recording availability remains unverified.
+- HLS support covers unencrypted playlists. Encrypted, byte-range, and gap playlists are unsupported. Full HLS capture requires a completed playlist.
+- The 238 unsupported groups comprise 156 Google Drive and 82 Facebook references at the group level. An offline yt-dlp check recognized the URL formats for all 156 Drive groups and 78 Facebook groups. Four Facebook short share links need redirect resolution. Anonymous access, download permissions, and usable media transport remain unverified.
