@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from evaluation.v4_analysis import policy_scores
+from evaluation.v4_analysis import freeze_inputs, policy_scores
 from media_ingestion.pipeline import atomic_json
 from vocabulary.retrieval import read_lexicon
 
@@ -25,7 +25,7 @@ def main():
         atomic_json(path, {"plan_sha256": manifest["plan_sha256"], "name": name, "policy": policies[name],
                            "selection": "among policies with any prompted development retry if available, highest mean "
                                         "term F1, then lowest mean WER, then smallest token budget",
-                           "development_prompted_retries": exposure,
+                           "development_prompted_retries": exposure, "protocol_files_sha256": freeze_inputs(),
                            "development_scores": scores})
         print("Frozen policy:", name, flush=True)
     env = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "OMP_NUM_THREADS": "4"}

@@ -103,25 +103,41 @@ def acceptance(original, candidate, plausibles, term_index, policy):
 
 
 class AdaptiveInference:
-    def __init__(self, engine, lexicon, policy, prompted):
+    def __init__(self, engine, lexicon, policy, prompted, baseline_cache=None):
         self.engine = engine
         self.lexicon = lexicon
         self.term_index = index_terms(row["term"] for row in lexicon)
         self.policy = policy
         self.prompted = prompted
+        self.baseline_cache = baseline_cache
         if not 1 <= policy["term_limit"] <= 5 or not 1 <= policy["hotword_budget"] <= 16:
             raise ValueError("V4 budgets exceed the configured limits")
-        self.configuration_sha256 = digest([engine.configuration_sha256, lexicon, policy, prompted, "v4.1"])
+        version = "v4.1" if baseline_cache is None else "v4.1-measured-shared-first-pass"
+        self.configuration_sha256 = digest([engine.configuration_sha256, lexicon, policy, prompted, version])
 
     def transcribe(self, audio, *, metadata=None, expected_sha256=None):
         with measure_resources() as end_to_end:
-            baseline = self.engine.transcribe(audio, metadata=metadata, expected_sha256=expected_sha256)
+            if self.baseline_cache is None:
+                baseline = self.engine.transcribe(audio, metadata=metadata, expected_sha256=expected_sha256)
+            else:
+                baseline = self.baseline_cache[(metadata or {})["clip_id"]]
+                if (baseline["audio_sha256"] != expected_sha256
+                        or baseline["configuration_sha256"] != self.engine.configuration_sha256):
+                    raise ValueError("Cached first pass differs from the expected audio or decode configuration")
             rows, events = self.revise(audio, baseline, (metadata or {}).get("source_record", {}))
             text = " ".join(row["text"] for row in rows).strip()
             quality = assess_quality(text, rows, baseline["audio_duration_seconds"])
+        measured = end_to_end
+        if self.baseline_cache is not None:
+            first = baseline["inference"]
+            measured = {**end_to_end, "wall_seconds": first["wall_seconds"] + end_to_end["wall_seconds"],
+                        "rss_peak_sampled_bytes": max(first["rss_peak_sampled_bytes"],
+                                                      end_to_end["rss_peak_sampled_bytes"]),
+                        "measurement": "measured_first_pass_plus_measured_adaptation"}
         return {**baseline, "text": text, "segments": rows, "quality": quality,
                 "configuration_sha256": self.configuration_sha256,
-                "first_pass_inference": baseline["inference"], "inference": end_to_end,
+                "first_pass_inference": baseline["inference"], "inference": measured,
+                "adaptation_phase_inference": end_to_end if self.baseline_cache is not None else None,
                 "adaptation": {"prompted": self.prompted, "policy": self.policy, "events": events,
                                "baseline_segments": len(baseline["segments"])}}
 

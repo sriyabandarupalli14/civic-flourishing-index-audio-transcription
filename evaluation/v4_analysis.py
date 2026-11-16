@@ -3,10 +3,18 @@
 import json
 import statistics
 from collections import Counter
+from pathlib import Path
 
 from evaluation.metrics import index_terms, occurrences, tokens
 from evaluation.results import load_predictions, compare, pool
+from media_ingestion.pipeline import hash_file
 from transcription.adaptive import has_loop
+
+
+def freeze_inputs():
+    paths = ("configs/whisper.toml", "configs/v4_policies.json", "configs/religious_lexicon.tsv",
+             "configs/sermon_vocabulary.json", "transcription/adaptive.py", "scripts/run_v4_condition.py")
+    return {path: hash_file(Path(path)) for path in paths}
 
 
 def clips_for(data, subset):

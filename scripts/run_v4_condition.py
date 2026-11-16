@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from evaluation.v4_analysis import checkpoint_set, freeze_inputs
 from media_ingestion.pipeline import atomic_json
 from transcription.adaptive import AdaptiveInference
 from transcription.batch import run_batch
@@ -42,17 +43,27 @@ def main():
                for row in manifest["clips"] if row["status"] == "ready" and row["subset"] == args.subset]
     lexicon = read_lexicon(Path("configs/religious_lexicon.tsv"))
     policy = None
+    if args.subset == "held_out":
+        freeze = json.loads((args.data / "frozen_policy.json").read_text())
+        if freeze["plan_sha256"] != manifest["plan_sha256"] or freeze["protocol_files_sha256"] != freeze_inputs():
+            raise ValueError("The evaluation dataset or decoding protocol differs from the freeze")
     if args.condition.startswith("V4"):
         policies = json.loads(Path("configs/v4_policies.json").read_text())
         if args.subset == "held_out":
-            freeze = json.loads((args.data / "frozen_policy.json").read_text())
-            if freeze["plan_sha256"] != manifest["plan_sha256"] or freeze["policy"] != policies[freeze["name"]]:
+            if freeze["policy"] != policies[freeze["name"]]:
                 raise ValueError("Frozen policy belongs to a different dataset or configuration")
             if args.policy and args.policy != freeze["name"]:
                 raise ValueError("Held-out inference requires the frozen policy")
             policy = freeze["policy"]
         else:
             policy = policies[args.policy or "conservative"]
+
+    baseline_cache = None
+    if args.subset == "held_out" and policy:
+        expected = {row["clip_id"]: row for row in entries}
+        baseline_cache = checkpoint_set(args.data / "runs/held_out/V0", expected)
+        if baseline_cache.keys() != expected.keys():
+            raise ValueError("Both arms require the verified and timed V0 first pass")
 
     def factory():
         config = read_config(Path("configs/whisper.toml"))
@@ -73,7 +84,7 @@ def main():
         config["prompt"] = {"mode": "none"}
         config["decoding"].update(initial_prompt=None, hotwords=None)
         engine = WhisperInference(config, model_dir=model_dir)
-        return (AdaptiveInference(engine, lexicon, policy, args.condition == "V4-B")
+        return (AdaptiveInference(engine, lexicon, policy, args.condition == "V4-B", baseline_cache)
                 if policy else MeasuredBaseline(engine))
 
     output = args.data / "runs" / args.subset / (args.label or args.condition)

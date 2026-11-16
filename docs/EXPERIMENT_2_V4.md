@@ -52,10 +52,12 @@ to all three and report the absent treatment exposure.
 The frozen policy applies to both arms on held-out clips. The reported success
 check requires V4-B to improve term F1 against V0 and V4-A on both references
 without increasing WER. The efficiency target is at least 20% lower median
-runtime than unprompted medium.en. Clip-level timing includes baseline decode,
-live retrieval and prompt construction where applicable, span extraction,
-retry, and merge, with initialization separate. Sampled peak RSS is process
-memory. V3 uses live hybrid retrieval with the original top-32 and 96-token
+runtime than unprompted medium.en. The held-out V4 arms reuse the same verified
+V0 first pass. Their end-to-end cost is the per-clip measured V0 time plus the
+measured adaptation phase, including retrieval, prompt construction, span
+extraction, retry and merge. V4 peak RSS is the larger measured phase peak.
+Initialization and checkpoint writes are separate from clip-level timings.
+Development runs measure both phases in one execution. V3 uses live hybrid retrieval with the original top-32 and 96-token
 settings.
 
 ## Reproduction

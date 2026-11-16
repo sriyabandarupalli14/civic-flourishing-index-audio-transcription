@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from evaluation.metrics import index_terms
-from evaluation.v4_analysis import checkpoint_set, clips_for, coverage, diagnostics
+from evaluation.v4_analysis import checkpoint_set, clips_for, coverage, diagnostics, freeze_inputs
 from media_ingestion.pipeline import atomic_json, hash_file
 from vocabulary.retrieval import read_lexicon
 
@@ -73,6 +73,8 @@ def main():
     subprocess.run(command, check=True)
     comparison = json.loads((report / "comparison.json").read_text())
     freeze = json.loads((root / "frozen_policy.json").read_text())
+    if freeze["plan_sha256"] != manifest["plan_sha256"] or freeze["protocol_files_sha256"] != freeze_inputs():
+        raise ValueError("Saved predictions cannot be reproduced from the frozen protocol")
     paired = {(row["reference"], row["condition"]): row for row in comparison["summaries"]}
     faster = 1 - stats["V4-B"]["median_seconds"] / stats["medium"]["median_seconds"]
     def improves(treatment, control):
@@ -135,6 +137,8 @@ def main():
     lines += ["", f"V4-B used {percent(faster)} less median time than medium.en. "
               f"The joint improvement check against V0 and V4-A {'passed' if improved else 'did not pass'}.", "",
               f"V4-B supplied hints on {stats['V4-B']['prompted_retries']} of {stats['V4-B']['retries']} held-out retries.",
+              "V4 end-to-end cost sums separately measured V0 and adaptation wall times. The reported "
+              "V4 peak RSS is the larger phase peak. V3 includes live metadata ranking.",
               "See the retry examples for span-level hypotheses and rejection reasons.", "",
               "The sample enriches terminology through metadata. Shared churches, imperfect references, and near-ceiling "
               "baseline terminology recall limit conclusions about generalization. Sampled process RSS and local CPU "

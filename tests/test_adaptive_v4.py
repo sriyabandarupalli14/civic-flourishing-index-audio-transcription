@@ -75,3 +75,28 @@ class AdaptiveTests(unittest.TestCase):
         self.assertEqual(b[1], neighbor)
         self.assertIn("Ezekiel", b[0]["text"])
         self.assertEqual(b[0]["end_seconds"], row["end_seconds"])
+
+    def test_shared_first_pass_cost_includes_adaptation_and_verifies_provenance(self):
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from transcription.adaptive import AdaptiveInference
+
+        @contextmanager
+        def resources():
+            yield {"wall_seconds": 1.5, "rss_peak_sampled_bytes": 4}
+
+        baseline = {"audio_sha256": "fixture-hash", "configuration_sha256": "base",
+                    "inference": {"wall_seconds": 8, "rss_peak_sampled_bytes": 10},
+                    "segments": [], "audio_duration_seconds": 60}
+        engine = SimpleNamespace(configuration_sha256="base")
+        policy = {"term_limit": 2, "hotword_budget": 8}
+        model = AdaptiveInference(engine, self.lexicon, policy, True, {"clip": baseline})
+        with patch.object(model, "revise", return_value=([], [])), patch(
+                "transcription.adaptive.measure_resources", resources):
+            result = model.transcribe("unused", metadata={"clip_id": "clip"}, expected_sha256="fixture-hash")
+            self.assertEqual(result["inference"]["wall_seconds"], 9.5)
+            self.assertEqual(result["inference"]["rss_peak_sampled_bytes"], 10)
+            with self.assertRaisesRegex(ValueError, "Cached first pass"):
+                model.transcribe("unused", metadata={"clip_id": "clip"}, expected_sha256="different")
